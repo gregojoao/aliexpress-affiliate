@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AliExpress.Affiliate/AliExpress.Affiliate.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AliExpress.Affiliate.Tests/AliExpress.Affiliate.Tests.csproj" />
+  </Folder>
+</Solution>
