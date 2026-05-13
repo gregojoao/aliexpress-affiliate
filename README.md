@@ -1,19 +1,28 @@
 # AliExpress.Affiliate
 
-Minimal .NET 10 client for the AliExpress Open Platform affiliate APIs.
+Minimal .NET client for the AliExpress Open Platform affiliate APIs.
 
-It supports:
+`AliExpress.Affiliate` helps generate affiliate links, fetch product details, sign Open Platform requests, and handle the common case where AliExpress returns only `source_value` instead of a promotion link.
 
-- Generating affiliate links with `aliexpress.affiliate.link.generate`
-- Fetching product details with `aliexpress.affiliate.productdetail.get`
-- TOP-style request signing with `md5`, `hmac-md5`, or `hmac-sha256`
-- AliExpress product URL normalization by trimming everything after `.html`
-- Parsing product title, current price, original price, image, product URL, and promotion link
-- Detecting responses where AliExpress returns only `source_value` and no `promotion_link`
+## Features
 
-## Install
+- Generate affiliate links with `aliexpress.affiliate.link.generate`
+- Fetch product details with `aliexpress.affiliate.productdetail.get`
+- Sign TOP-style requests with `md5`, `hmac-md5`, or `hmac-sha256`
+- Normalize AliExpress product URLs by trimming everything after `.html`
+- Parse title, current price, original price, image URL, product URL, and promotion link
+- Detect non-affiliate products with a dedicated exception
+- Load options from dictionaries or configuration-style environment values
 
-After publishing to NuGet:
+## Requirements
+
+- .NET 10 SDK or newer
+- AliExpress Open Platform credentials
+- An affiliate tracking ID
+
+## Installation
+
+After the package is published to NuGet:
 
 ```bash
 dotnet add package AliExpress.Affiliate
@@ -56,7 +65,9 @@ Console.WriteLine(result?.ProductPrice);
 Console.WriteLine(result?.ProductOriginalPrice);
 ```
 
-## Product Details Only
+## Product Details
+
+Use `GetProductDetailsAsync` when you only need product metadata:
 
 ```csharp
 var details = await client.GetProductDetailsAsync(
@@ -68,9 +79,25 @@ Console.WriteLine(details?.ProductPrice);
 Console.WriteLine(details?.ProductOriginalPrice);
 ```
 
-## Environment Variable Helper
+The method accepts either a product ID or an AliExpress product URL.
 
-If you already keep credentials in a dictionary or configuration section, you can use:
+## Configuration
+
+You can build options directly:
+
+```csharp
+var options = new AliExpressAffiliateOptions
+{
+    AppKey = "<your-app-key>",
+    AppSecret = "<your-app-secret>",
+    TrackingId = "<your-tracking-id>",
+    TargetCurrency = "BRL",
+    TargetLanguage = "PT",
+    ShipToCountry = "BR"
+};
+```
+
+Or load them from dictionary/configuration values:
 
 ```csharp
 var options = AliExpressAffiliateEnvironment.FromDictionary(new Dictionary<string, string>
@@ -86,26 +113,56 @@ var options = AliExpressAffiliateEnvironment.FromDictionary(new Dictionary<strin
 });
 ```
 
-## Non-Affiliate Products
+Supported configuration keys include:
 
-Some AliExpress products cannot generate affiliate links. When the API succeeds but returns no `promotion_link`, the client throws:
+| Option | Keys |
+| --- | --- |
+| Endpoint | `ALIEXPRESS_AFFILIATE_API_ENDPOINT`, `ALIEXPRESS_ENDPOINT` |
+| App key | `ALIEXPRESS_AFFILIATE_APP_KEY`, `ALIEXPRESS_OPEN_API_APP_KEY`, `ALIEXPRESS_APP_KEY` |
+| App secret | `ALIEXPRESS_AFFILIATE_APP_SECRET`, `ALIEXPRESS_OPEN_API_APP_SECRET`, `ALIEXPRESS_APP_SECRET` |
+| Tracking ID | `ALIEXPRESS_TRACKING_ID`, `ALIEXPRESS_AFFILIATE_TRACKING_ID` |
+| Sign method | `ALIEXPRESS_AFFILIATE_API_SIGN_METHOD`, `ALIEXPRESS_SIGN_METHOD` |
+| Product details | `ALIEXPRESS_AFFILIATE_PRODUCT_DETAIL_ENABLED`, `ALIEXPRESS_PRODUCT_DETAIL_ENABLED` |
+| Timeout | `ALIEXPRESS_AFFILIATE_API_TIMEOUT_MS` |
+
+## Error Handling
+
+Some AliExpress products cannot generate affiliate links. When the API succeeds but does not return `promotion_link`, the client throws:
 
 ```csharp
 AliExpressAffiliateLinkUnavailableException
 ```
 
-This is different from an HTTP/signature/configuration failure and is useful for sending the item to a dedicated error queue.
+This is different from HTTP, signature, or configuration failures, so callers can route the item to a dedicated retry or review flow.
 
-## Publishing
+## Project Structure
+
+The library follows a lightweight DDD-style organization:
+
+```text
+src/AliExpress.Affiliate/
+  Application/      Use cases and application ports
+  Domain/           Product URL, product ID, price, and result rules
+  Infrastructure/   AliExpress Open Platform HTTP, signing, requests, and parsing
+```
+
+## Development
+
+Restore, build, test, and pack locally:
 
 ```bash
+dotnet restore
+dotnet build
 dotnet test
 dotnet pack src/AliExpress.Affiliate/AliExpress.Affiliate.csproj -c Release
-dotnet nuget push src/AliExpress.Affiliate/bin/Release/AliExpress.Affiliate.0.1.0.nupkg \
-  --api-key <NUGET_API_KEY> \
-  --source https://api.nuget.org/v3/index.json
 ```
+
+The repository includes a GitHub Actions workflow that builds, tests, packs, and uploads the generated NuGet package as a workflow artifact.
+
+## Contributing
+
+Issues and pull requests are welcome. Please keep changes focused, add or update tests when behavior changes, and run `dotnet test` before opening a pull request.
 
 ## License
 
-MIT
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
