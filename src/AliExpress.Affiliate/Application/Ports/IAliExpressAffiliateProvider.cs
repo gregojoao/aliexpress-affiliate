@@ -1,3 +1,5 @@
+using AliExpress.Affiliate.Application.Requests;
+using AliExpress.Affiliate.Configuration;
 using AliExpress.Affiliate.Domain;
 
 namespace AliExpress.Affiliate.Application.Ports;
@@ -6,6 +8,7 @@ internal interface IAliExpressAffiliateProvider
 {
     Task<AffiliateLinkLookup> GenerateAffiliateLinkAsync(
         string sourceUrl,
+        AliExpressAffiliateLinkRequest request,
         AliExpressAffiliateOptions options,
         DateTimeOffset timestamp,
         CancellationToken cancellationToken);
@@ -18,6 +21,7 @@ internal interface IAliExpressAffiliateProvider
 
     Task<IReadOnlyList<AliExpressAffiliateLink>> GenerateAffiliateLinksAsync(
         IReadOnlyList<string> sourceUrls,
+        AliExpressAffiliateLinksRequest request,
         AliExpressAffiliateOptions options,
         DateTimeOffset timestamp,
         CancellationToken cancellationToken);

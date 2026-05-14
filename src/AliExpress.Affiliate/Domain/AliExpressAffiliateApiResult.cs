@@ -1,10 +1,10 @@
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.Domain;
 
 public sealed record AliExpressAffiliateApiResult<T>(
     IReadOnlyList<T> Items,
-    int CurrentPageNo,
+    int CurrentPageNumber,
     int CurrentRecordCount,
-    int TotalPageNo,
+    int TotalPageCount,
     int TotalRecordCount,
     bool IsFinished,
     string RawJson);

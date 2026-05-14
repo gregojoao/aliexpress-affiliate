@@ -1,3 +1,5 @@
+using AliExpress.Affiliate.Exceptions;
+using AliExpress.Affiliate.OpenPlatform;
 using System.Net.Http.Headers;
 
 namespace AliExpress.Affiliate.Infrastructure.OpenPlatform;
@@ -31,8 +33,7 @@ internal sealed class AliExpressOpenPlatformGateway : IAliExpressOpenPlatformGat
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(
-                $"AliExpress API returned HTTP {(int)response.StatusCode}: {responseBody}");
+            throw new AliExpressAffiliateHttpException(response.StatusCode, responseBody);
         }
 
         return responseBody;

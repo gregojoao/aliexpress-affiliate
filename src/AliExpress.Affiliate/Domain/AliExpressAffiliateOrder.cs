@@ -1,4 +1,4 @@
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.Domain;
 
 public sealed record AliExpressAffiliateOrder(
     string OrderId,

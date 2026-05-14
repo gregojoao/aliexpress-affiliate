@@ -1,4 +1,4 @@
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.Application.Requests;
 
 public sealed record AliExpressSmartMatchQuery
 {
@@ -13,6 +13,6 @@ public sealed record AliExpressSmartMatchQuery
     public string TargetLanguage { get; init; } = string.Empty;
     public string TrackingId { get; init; } = string.Empty;
     public string User { get; init; } = string.Empty;
-    public int PageNo { get; init; } = 1;
-    public string Country { get; init; } = string.Empty;
+    public int PageNumber { get; init; } = 1;
+    public string CountryCode { get; init; } = string.Empty;
 }

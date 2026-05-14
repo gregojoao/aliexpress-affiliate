@@ -1,6 +1,6 @@
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.Exceptions;
 
-public sealed class AliExpressAffiliateLinkUnavailableException : Exception
+public sealed class AliExpressAffiliateLinkUnavailableException : AliExpressAffiliateException
 {
     public AliExpressAffiliateLinkUnavailableException(
         string productUrl,

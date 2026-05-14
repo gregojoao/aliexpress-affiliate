@@ -1,5 +1,8 @@
-using AliExpress.Affiliate.Domain;
 using AliExpress.Affiliate.Application.Ports;
+using AliExpress.Affiliate.Application.Requests;
+using AliExpress.Affiliate.Configuration;
+using AliExpress.Affiliate.Domain;
+using AliExpress.Affiliate.Exceptions;
 
 namespace AliExpress.Affiliate.Application;
 
@@ -17,24 +20,26 @@ internal sealed class AliExpressAffiliateService
     }
 
     public async Task<AliExpressAffiliateLinkResult?> GenerateAffiliateLinkAsync(
-        string productUrl,
+        AliExpressAffiliateLinkRequest request,
         AliExpressAffiliateOptions options,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(productUrl) ||
-            !Uri.TryCreate(productUrl, UriKind.Absolute, out _))
+        if (string.IsNullOrWhiteSpace(request.ProductUrl) ||
+            !Uri.TryCreate(request.ProductUrl, UriKind.Absolute, out _))
         {
             return null;
         }
 
-        options.Validate();
+        var effectiveOptions = ApplyLinkRequestDefaults(request, options);
+        effectiveOptions.Validate();
 
-        using var timeoutCts = CreateTimeoutTokenSource(options, cancellationToken);
+        using var timeoutCts = CreateTimeoutTokenSource(effectiveOptions, cancellationToken);
 
-        var sourceUrl = AliExpressProductUrl.Normalize(productUrl);
+        var sourceUrl = AliExpressProductUrl.Normalize(request.ProductUrl);
         var linkLookup = await _affiliateProvider.GenerateAffiliateLinkAsync(
             sourceUrl,
-            options,
+            request,
+            effectiveOptions,
             _utcNow(),
             timeoutCts.Token);
 
@@ -47,12 +52,12 @@ internal sealed class AliExpressAffiliateService
         }
 
         AliExpressProductDetails? productDetails = null;
-        if (options.IncludeProductDetails &&
+        if (request.IncludeProductDetails &&
             AliExpressProductId.TryFromUrl(sourceUrl, out var productId))
         {
             productDetails = await GetProductDetailsCoreAsync(
                 productId,
-                options,
+                effectiveOptions,
                 timeoutCts.Token);
         }
 
@@ -77,13 +82,13 @@ internal sealed class AliExpressAffiliateService
     }
 
     public async Task<IReadOnlyList<AliExpressAffiliateLink>> GenerateAffiliateLinksAsync(
-        IEnumerable<string> sourceUrls,
+        AliExpressAffiliateLinksRequest request,
         AliExpressAffiliateOptions options,
         CancellationToken cancellationToken = default)
     {
         options.Validate();
 
-        var normalizedUrls = sourceUrls
+        var normalizedUrls = request.SourceUrls
             .Where(url => !string.IsNullOrWhiteSpace(url))
             .Select(AliExpressProductUrl.Normalize)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -98,6 +103,7 @@ internal sealed class AliExpressAffiliateService
 
         return await _affiliateProvider.GenerateAffiliateLinksAsync(
             normalizedUrls,
+            request,
             options,
             _utcNow(),
             timeoutCts.Token);
@@ -109,7 +115,7 @@ internal sealed class AliExpressAffiliateService
         CancellationToken cancellationToken = default)
     {
         return ExecuteWithTimeoutAsync(options, cancellationToken, token =>
-            _affiliateProvider.SearchProductsAsync(ApplyOptionDefaults(query), options, _utcNow(), token));
+            _affiliateProvider.SearchProductsAsync(query, options, _utcNow(), token));
     }
 
     public Task<AliExpressAffiliateApiResult<AliExpressAffiliateProduct>> GetHotProductsAsync(
@@ -118,7 +124,7 @@ internal sealed class AliExpressAffiliateService
         CancellationToken cancellationToken = default)
     {
         return ExecuteWithTimeoutAsync(options, cancellationToken, token =>
-            _affiliateProvider.GetHotProductsAsync(ApplyOptionDefaults(query), options, _utcNow(), token));
+            _affiliateProvider.GetHotProductsAsync(query, options, _utcNow(), token));
     }
 
     public Task<AliExpressAffiliateApiResult<AliExpressAffiliateProduct>> GetHotProductDownloadAsync(
@@ -127,7 +133,7 @@ internal sealed class AliExpressAffiliateService
         CancellationToken cancellationToken = default)
     {
         return ExecuteWithTimeoutAsync(options, cancellationToken, token =>
-            _affiliateProvider.GetHotProductDownloadAsync(ApplyOptionDefaults(query), options, _utcNow(), token));
+            _affiliateProvider.GetHotProductDownloadAsync(query, options, _utcNow(), token));
     }
 
     public Task<AliExpressAffiliateApiResult<AliExpressAffiliateCategory>> GetCategoriesAsync(
@@ -154,7 +160,7 @@ internal sealed class AliExpressAffiliateService
         CancellationToken cancellationToken = default)
     {
         return ExecuteWithTimeoutAsync(options, cancellationToken, token =>
-            _affiliateProvider.GetFeaturedPromoProductsAsync(ApplyOptionDefaults(query), options, _utcNow(), token));
+            _affiliateProvider.GetFeaturedPromoProductsAsync(query, options, _utcNow(), token));
     }
 
     public Task<AliExpressAffiliateApiResult<AliExpressAffiliateProduct>> GetSmartMatchProductsAsync(
@@ -163,7 +169,7 @@ internal sealed class AliExpressAffiliateService
         CancellationToken cancellationToken = default)
     {
         return ExecuteWithTimeoutAsync(options, cancellationToken, token =>
-            _affiliateProvider.GetSmartMatchProductsAsync(ApplyOptionDefaults(query), options, _utcNow(), token));
+            _affiliateProvider.GetSmartMatchProductsAsync(query, options, _utcNow(), token));
     }
 
     public Task<AliExpressAffiliateApiResult<AliExpressAffiliateOrder>> GetOrdersAsync(
@@ -225,23 +231,28 @@ internal sealed class AliExpressAffiliateService
         return await execute(timeoutCts.Token);
     }
 
-    private static AliExpressProductQuery ApplyOptionDefaults(AliExpressProductQuery query)
+    private static AliExpressAffiliateOptions ApplyLinkRequestDefaults(
+        AliExpressAffiliateLinkRequest request,
+        AliExpressAffiliateOptions options)
     {
-        return query;
+        return new AliExpressAffiliateOptions
+        {
+            ApiEndpoint = options.ApiEndpoint,
+            AppKey = options.AppKey,
+            AppSecret = options.AppSecret,
+            DefaultTrackingId = FirstNonEmpty(request.TrackingId, options.DefaultTrackingId),
+            AppSignature = options.AppSignature,
+            SignMethod = options.SignMethod,
+            DefaultPromotionLinkType = FirstNonEmpty(request.PromotionLinkType, options.DefaultPromotionLinkType),
+            DefaultShipToCountry = FirstNonEmpty(request.ShipToCountryCode, options.DefaultShipToCountry),
+            DefaultTargetCurrency = FirstNonEmpty(request.TargetCurrency, options.DefaultTargetCurrency),
+            DefaultTargetLanguage = FirstNonEmpty(request.TargetLanguage, options.DefaultTargetLanguage),
+            TimeoutMilliseconds = options.TimeoutMilliseconds
+        };
     }
 
-    private static AliExpressHotProductDownloadQuery ApplyOptionDefaults(AliExpressHotProductDownloadQuery query)
+    private static string FirstNonEmpty(params string[] values)
     {
-        return query;
-    }
-
-    private static AliExpressFeaturedPromoProductsQuery ApplyOptionDefaults(AliExpressFeaturedPromoProductsQuery query)
-    {
-        return query;
-    }
-
-    private static AliExpressSmartMatchQuery ApplyOptionDefaults(AliExpressSmartMatchQuery query)
-    {
-        return query;
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
     }
 }

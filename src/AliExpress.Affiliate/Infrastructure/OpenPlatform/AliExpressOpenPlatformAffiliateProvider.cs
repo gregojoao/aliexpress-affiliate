@@ -1,4 +1,6 @@
 using AliExpress.Affiliate.Application.Ports;
+using AliExpress.Affiliate.Application.Requests;
+using AliExpress.Affiliate.Configuration;
 using AliExpress.Affiliate.Domain;
 
 namespace AliExpress.Affiliate.Infrastructure.OpenPlatform;
@@ -25,12 +27,17 @@ internal sealed class AliExpressOpenPlatformAffiliateProvider : IAliExpressAffil
 
     public async Task<AffiliateLinkLookup> GenerateAffiliateLinkAsync(
         string sourceUrl,
+        AliExpressAffiliateLinkRequest request,
         AliExpressAffiliateOptions options,
         DateTimeOffset timestamp,
         CancellationToken cancellationToken)
     {
-        var request = AliExpressOpenPlatformRequestFactory.BuildLinkGenerateRequest(sourceUrl, options, timestamp);
-        var responseBody = await _gateway.SendAsync(request, cancellationToken);
+        var openPlatformRequest = AliExpressOpenPlatformRequestFactory.BuildLinkGenerateRequest(
+            sourceUrl,
+            request,
+            options,
+            timestamp);
+        var responseBody = await _gateway.SendAsync(openPlatformRequest, cancellationToken);
         var affiliateUrl = AliExpressOpenPlatformResponseParser.ExtractAffiliateUrl(responseBody);
         var missingLinkSummary = string.IsNullOrWhiteSpace(affiliateUrl)
             ? AliExpressOpenPlatformResponseParser.SummarizeLinkGenerateResponse(responseBody)
@@ -56,21 +63,22 @@ internal sealed class AliExpressOpenPlatformAffiliateProvider : IAliExpressAffil
 
     public async Task<IReadOnlyList<AliExpressAffiliateLink>> GenerateAffiliateLinksAsync(
         IReadOnlyList<string> sourceUrls,
+        AliExpressAffiliateLinksRequest request,
         AliExpressAffiliateOptions options,
         DateTimeOffset timestamp,
         CancellationToken cancellationToken)
     {
-        var request = AliExpressOpenPlatformRequestFactory.BuildApiRequest(
+        var openPlatformRequest = AliExpressOpenPlatformRequestFactory.BuildApiRequest(
             "aliexpress.affiliate.link.generate",
             options,
             timestamp,
             new Dictionary<string, string>
             {
-                ["promotion_link_type"] = FirstNonEmpty(options.PromotionLinkType, AliExpressAffiliateOptions.DefaultPromotionLinkType),
+                ["promotion_link_type"] = OpenPlatformText.FirstNonEmpty(request.PromotionLinkType, options.DefaultPromotionLinkType, AliExpressAffiliateOptions.FallbackPromotionLinkType),
                 ["source_values"] = string.Join(",", sourceUrls),
-                ["tracking_id"] = options.TrackingId
+                ["tracking_id"] = OpenPlatformText.FirstNonEmpty(request.TrackingId, options.DefaultTrackingId)
             });
-        var responseBody = await _gateway.SendAsync(request, cancellationToken);
+        var responseBody = await _gateway.SendAsync(openPlatformRequest, cancellationToken);
 
         return AliExpressOpenPlatformResponseParser.ExtractAffiliateLinks(responseBody);
     }
@@ -213,126 +221,110 @@ internal sealed class AliExpressOpenPlatformAffiliateProvider : IAliExpressAffil
         AliExpressProductQuery query,
         AliExpressAffiliateOptions options)
     {
-        return new Dictionary<string, string>
-        {
-            ["category_ids"] = query.CategoryIds,
-            ["fields"] = query.Fields,
-            ["keywords"] = query.Keywords,
-            ["max_sale_price"] = query.MaxSalePrice,
-            ["min_sale_price"] = query.MinSalePrice,
-            ["page_no"] = query.PageNo.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["page_size"] = query.PageSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["platform_product_type"] = query.PlatformProductType,
-            ["sort"] = query.Sort,
-            ["target_currency"] = FirstNonEmpty(query.TargetCurrency, options.TargetCurrency),
-            ["target_language"] = FirstNonEmpty(query.TargetLanguage, options.TargetLanguage),
-            ["tracking_id"] = FirstNonEmpty(query.TrackingId, options.TrackingId),
-            ["ship_to_country"] = FirstNonEmpty(query.ShipToCountry, options.ShipToCountry),
-            ["delivery_days"] = query.DeliveryDays
-        };
+        return new OpenPlatformParameterBuilder()
+            .Add("category_ids", query.CategoryIds)
+            .Add("fields", query.Fields)
+            .Add("keywords", query.Keywords)
+            .Add("max_sale_price", query.MaxSalePrice)
+            .Add("min_sale_price", query.MinSalePrice)
+            .Add("page_no", query.PageNumber)
+            .Add("page_size", query.PageSize)
+            .Add("platform_product_type", query.PlatformProductType)
+            .Add("sort", query.Sort)
+            .AddTargeting(query.TargetCurrency, options.DefaultTargetCurrency, query.TargetLanguage, options.DefaultTargetLanguage)
+            .AddTracking(query.TrackingId, options)
+            .AddCountry("ship_to_country", query.ShipToCountryCode, options)
+            .Add("delivery_days", query.DeliveryDays)
+            .Build();
     }
 
     private static Dictionary<string, string> ToParameters(
         AliExpressHotProductDownloadQuery query,
         AliExpressAffiliateOptions options)
     {
-        return new Dictionary<string, string>
-        {
-            ["category_id"] = query.CategoryId,
-            ["fields"] = query.Fields,
-            ["locale_site"] = query.LocaleSite,
-            ["page_no"] = query.PageNo.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["page_size"] = query.PageSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["target_currency"] = FirstNonEmpty(query.TargetCurrency, options.TargetCurrency),
-            ["target_language"] = FirstNonEmpty(query.TargetLanguage, options.TargetLanguage),
-            ["tracking_id"] = FirstNonEmpty(query.TrackingId, options.TrackingId),
-            ["country"] = FirstNonEmpty(query.Country, options.ShipToCountry)
-        };
+        return new OpenPlatformParameterBuilder()
+            .Add("category_id", query.CategoryId)
+            .Add("fields", query.Fields)
+            .Add("locale_site", query.Locale)
+            .Add("page_no", query.PageNumber)
+            .Add("page_size", query.PageSize)
+            .AddTargeting(query.TargetCurrency, options.DefaultTargetCurrency, query.TargetLanguage, options.DefaultTargetLanguage)
+            .AddTracking(query.TrackingId, options)
+            .AddCountry("country", query.CountryCode, options)
+            .Build();
     }
 
     private static Dictionary<string, string> ToParameters(
         AliExpressFeaturedPromoProductsQuery query,
         AliExpressAffiliateOptions options)
     {
-        return new Dictionary<string, string>
-        {
-            ["category_id"] = query.CategoryId,
-            ["fields"] = query.Fields,
-            ["page_no"] = query.PageNo.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["page_size"] = query.PageSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["promotion_end_time"] = query.PromotionEndTime,
-            ["promotion_name"] = query.PromotionName,
-            ["promotion_start_time"] = query.PromotionStartTime,
-            ["sort"] = query.Sort,
-            ["target_currency"] = FirstNonEmpty(query.TargetCurrency, options.TargetCurrency),
-            ["target_language"] = FirstNonEmpty(query.TargetLanguage, options.TargetLanguage),
-            ["tracking_id"] = FirstNonEmpty(query.TrackingId, options.TrackingId),
-            ["country"] = FirstNonEmpty(query.Country, options.ShipToCountry)
-        };
+        return new OpenPlatformParameterBuilder()
+            .Add("category_id", query.CategoryId)
+            .Add("fields", query.Fields)
+            .Add("page_no", query.PageNumber)
+            .Add("page_size", query.PageSize)
+            .Add("promotion_end_time", query.PromotionEndTime)
+            .Add("promotion_name", query.PromotionName)
+            .Add("promotion_start_time", query.PromotionStartTime)
+            .Add("sort", query.Sort)
+            .AddTargeting(query.TargetCurrency, options.DefaultTargetCurrency, query.TargetLanguage, options.DefaultTargetLanguage)
+            .AddTracking(query.TrackingId, options)
+            .AddCountry("country", query.CountryCode, options)
+            .Build();
     }
 
     private static Dictionary<string, string> ToParameters(
         AliExpressSmartMatchQuery query,
         AliExpressAffiliateOptions options)
     {
-        return new Dictionary<string, string>
-        {
-            ["app"] = query.App,
-            ["device"] = query.Device,
-            ["device_id"] = query.DeviceId,
-            ["fields"] = query.Fields,
-            ["keywords"] = query.Keywords,
-            ["product_id"] = query.ProductId,
-            ["site"] = query.Site,
-            ["target_currency"] = FirstNonEmpty(query.TargetCurrency, options.TargetCurrency),
-            ["target_language"] = FirstNonEmpty(query.TargetLanguage, options.TargetLanguage),
-            ["tracking_id"] = FirstNonEmpty(query.TrackingId, options.TrackingId),
-            ["user"] = query.User,
-            ["page_no"] = query.PageNo.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["country"] = FirstNonEmpty(query.Country, options.ShipToCountry)
-        };
+        return new OpenPlatformParameterBuilder()
+            .Add("app", query.App)
+            .Add("device", query.Device)
+            .Add("device_id", query.DeviceId)
+            .Add("fields", query.Fields)
+            .Add("keywords", query.Keywords)
+            .Add("product_id", query.ProductId)
+            .Add("site", query.Site)
+            .AddTargeting(query.TargetCurrency, options.DefaultTargetCurrency, query.TargetLanguage, options.DefaultTargetLanguage)
+            .AddTracking(query.TrackingId, options)
+            .Add("user", query.User)
+            .Add("page_no", query.PageNumber)
+            .AddCountry("country", query.CountryCode, options)
+            .Build();
     }
 
     private static Dictionary<string, string> ToParameters(AliExpressOrderListQuery query)
     {
-        return new Dictionary<string, string>
-        {
-            ["start_time"] = query.StartTime,
-            ["end_time"] = query.EndTime,
-            ["status"] = query.Status,
-            ["locale_site"] = query.LocaleSite,
-            ["page_no"] = query.PageNo.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["page_size"] = query.PageSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["fields"] = query.Fields
-        };
+        return new OpenPlatformParameterBuilder()
+            .Add("start_time", query.StartTime)
+            .Add("end_time", query.EndTime)
+            .Add("status", query.Status)
+            .Add("locale_site", query.Locale)
+            .Add("page_no", query.PageNumber)
+            .Add("page_size", query.PageSize)
+            .Add("fields", query.Fields)
+            .Build();
     }
 
     private static Dictionary<string, string> ToParameters(AliExpressOrderDetailsQuery query)
     {
-        return new Dictionary<string, string>
-        {
-            ["order_ids"] = query.OrderIds,
-            ["fields"] = query.Fields
-        };
+        return new OpenPlatformParameterBuilder()
+            .Add("order_ids", string.Join(",", query.OrderIds.Where(orderId => !string.IsNullOrWhiteSpace(orderId)).Select(orderId => orderId.Trim())))
+            .Add("fields", query.Fields)
+            .Build();
     }
 
     private static Dictionary<string, string> ToParameters(AliExpressOrderListByIndexQuery query)
     {
-        return new Dictionary<string, string>
-        {
-            ["start_time"] = query.StartTime,
-            ["end_time"] = query.EndTime,
-            ["status"] = query.Status,
-            ["time_type"] = query.TimeType,
-            ["start_query_index_id"] = query.StartQueryIndexId,
-            ["locale_site"] = query.LocaleSite,
-            ["page_size"] = query.PageSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["fields"] = query.Fields
-        };
-    }
-
-    private static string FirstNonEmpty(params string[] values)
-    {
-        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+        return new OpenPlatformParameterBuilder()
+            .Add("start_time", query.StartTime)
+            .Add("end_time", query.EndTime)
+            .Add("status", query.Status)
+            .Add("time_type", query.TimeType)
+            .Add("start_query_index_id", query.StartQueryIndexId)
+            .Add("locale_site", query.Locale)
+            .Add("page_size", query.PageSize)
+            .Add("fields", query.Fields)
+            .Build();
     }
 }

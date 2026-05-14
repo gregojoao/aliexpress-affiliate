@@ -1,11 +1,14 @@
 using AliExpress.Affiliate.Application;
+using AliExpress.Affiliate.Application.Requests;
+using AliExpress.Affiliate.Configuration;
 using AliExpress.Affiliate.Domain;
+using AliExpress.Affiliate.Exceptions;
 using AliExpress.Affiliate.Infrastructure.OpenPlatform;
 using Microsoft.Extensions.Options;
 
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.Clients;
 
-public sealed class AliExpressAffiliateClient
+public sealed class AliExpressAffiliateClient : IAliExpressAffiliateClient
 {
     private readonly AliExpressAffiliateService _affiliateService;
     private readonly AliExpressAffiliateOptions? _defaultOptions;
@@ -37,18 +40,18 @@ public sealed class AliExpressAffiliateClient
     }
 
     public Task<AliExpressAffiliateLinkResult?> GenerateAffiliateLinkAsync(
-        string productUrl,
+        AliExpressAffiliateLinkRequest request,
         AliExpressAffiliateOptions options,
         CancellationToken cancellationToken = default)
     {
-        return _affiliateService.GenerateAffiliateLinkAsync(productUrl, options, cancellationToken);
+        return _affiliateService.GenerateAffiliateLinkAsync(request, options, cancellationToken);
     }
 
     public Task<AliExpressAffiliateLinkResult?> GenerateAffiliateLinkAsync(
-        string productUrl,
+        AliExpressAffiliateLinkRequest request,
         CancellationToken cancellationToken = default)
     {
-        return GenerateAffiliateLinkAsync(productUrl, GetDefaultOptions(), cancellationToken);
+        return GenerateAffiliateLinkAsync(request, GetDefaultOptions(), cancellationToken);
     }
 
     public Task<AliExpressProductDetails?> GetProductDetailsAsync(
@@ -67,20 +70,19 @@ public sealed class AliExpressAffiliateClient
     }
 
     public Task<IReadOnlyList<AliExpressAffiliateLink>> GenerateAffiliateLinksAsync(
-        IEnumerable<string> sourceUrls,
+        AliExpressAffiliateLinksRequest request,
         AliExpressAffiliateOptions options,
         CancellationToken cancellationToken = default)
     {
-        return _affiliateService.GenerateAffiliateLinksAsync(sourceUrls, options, cancellationToken);
+        return _affiliateService.GenerateAffiliateLinksAsync(request, options, cancellationToken);
     }
 
     public Task<IReadOnlyList<AliExpressAffiliateLink>> GenerateAffiliateLinksAsync(
-        IEnumerable<string> sourceUrls,
+        AliExpressAffiliateLinksRequest request,
         CancellationToken cancellationToken = default)
     {
-        return GenerateAffiliateLinksAsync(sourceUrls, GetDefaultOptions(), cancellationToken);
+        return GenerateAffiliateLinksAsync(request, GetDefaultOptions(), cancellationToken);
     }
-
     public Task<AliExpressAffiliateApiResult<AliExpressAffiliateProduct>> SearchProductsAsync(
         AliExpressProductQuery query,
         AliExpressAffiliateOptions options,
@@ -231,70 +233,9 @@ public sealed class AliExpressAffiliateClient
         return GetOrdersByIndexAsync(query, GetDefaultOptions(), cancellationToken);
     }
 
-    public static AliExpressOpenPlatformRequest BuildLinkGenerateRequest(
-        string productUrl,
-        AliExpressAffiliateOptions options,
-        DateTimeOffset timestamp)
-    {
-        return AliExpressOpenPlatformRequestFactory.BuildLinkGenerateRequest(productUrl, options, timestamp);
-    }
-
-    public static AliExpressOpenPlatformRequest BuildProductDetailRequest(
-        string productId,
-        AliExpressAffiliateOptions options,
-        DateTimeOffset timestamp)
-    {
-        return AliExpressOpenPlatformRequestFactory.BuildProductDetailRequest(productId, options, timestamp);
-    }
-
-    public static AliExpressOpenPlatformRequest BuildApiRequest(
-        string method,
-        AliExpressAffiliateOptions options,
-        DateTimeOffset timestamp,
-        IReadOnlyDictionary<string, string>? apiParameters = null)
-    {
-        return AliExpressOpenPlatformRequestFactory.BuildApiRequest(method, options, timestamp, apiParameters);
-    }
-
-    public static string NormalizeAliExpressUrl(string url)
-    {
-        return AliExpressProductUrl.Normalize(url);
-    }
-
-    public static bool TryExtractProductId(
-        string productUrl,
-        out string productId)
-    {
-        return AliExpressProductUrl.TryExtractProductId(productUrl, out productId);
-    }
-
-    public static string CreateTopSignature(
-        IReadOnlyDictionary<string, string> parameters,
-        string appSecret,
-        string signMethod)
-    {
-        return AliExpressOpenPlatformSigner.CreateTopSignature(parameters, appSecret, signMethod);
-    }
-
-    public static string BuildSignatureSourceString(
-        IEnumerable<KeyValuePair<string, string>> parameters)
-    {
-        return AliExpressOpenPlatformSigner.BuildSignatureSourceString(parameters);
-    }
-
-    public static string ExtractAffiliateUrl(string responseBody)
-    {
-        return AliExpressOpenPlatformResponseParser.ExtractAffiliateUrl(responseBody);
-    }
-
-    public static AliExpressProductDetails? ExtractProductDetails(string responseBody)
-    {
-        return AliExpressOpenPlatformResponseParser.ExtractProductDetails(responseBody);
-    }
-
     private AliExpressAffiliateOptions GetDefaultOptions()
     {
-        return _defaultOptions ?? throw new InvalidOperationException(
+        return _defaultOptions ?? throw new AliExpressAffiliateValidationException(
             "No default AliExpressAffiliateOptions were configured. Pass options to this method or register the client with AddAliExpressAffiliate.");
     }
 }
