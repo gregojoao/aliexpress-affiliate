@@ -7,6 +7,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-8%20%7C%2010-512BD4.svg)](https://dotnet.microsoft.com/)
 
+Small .NET SDK for AliExpress Affiliate Open API workflows.
+
+Maintained by **Greco Labs**.
+
 `AliExpress.Affiliate` helps .NET applications generate affiliate links, discover products, fetch product details, read promotions, query orders, and handle AliExpress affiliate API responses with typed contracts.
 
 It also handles a common edge case from the affiliate API: successful responses that return only `source_value` instead of a usable `promotion_link`.
