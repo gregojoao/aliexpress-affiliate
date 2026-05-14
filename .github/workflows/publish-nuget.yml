@@ -35,11 +35,17 @@ jobs:
           path: artifacts/*.*nupkg
 
       - name: Publish package to NuGet
-        run: dotnet nuget push "artifacts/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        shell: bash
+        run: |
+          api_key="$(printf '%s' "$NUGET_API_KEY" | tr -d '\r\n')"
+          dotnet nuget push "artifacts/*.nupkg" --api-key "$api_key" --source https://api.nuget.org/v3/index.json --skip-duplicate
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
       - name: Publish symbols to NuGet
-        run: dotnet nuget push "artifacts/*.snupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        shell: bash
+        run: |
+          api_key="$(printf '%s' "$NUGET_API_KEY" | tr -d '\r\n')"
+          dotnet nuget push "artifacts/*.snupkg" --api-key "$api_key" --source https://api.nuget.org/v3/index.json --skip-duplicate
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
