@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace AliExpress.Affiliate.Tests;
@@ -157,6 +159,133 @@ public class AliExpressAffiliateClientTests
         handler.Requests[0].RequestBody.Should().NotContain("promotion_link_type=2");
         handler.Requests[1].RequestBody.Should().Contain("method=aliexpress.affiliate.productdetail.get");
         handler.Requests[1].RequestBody.Should().Contain("product_ids=1005006356702381");
+    }
+
+    [Fact]
+    public async Task GenerateAffiliateLinkAsync_WithDefaultOptionsFromConstructor_ShouldUseConfiguredOptions()
+    {
+        var handler = new QueueingHandler("""
+        {
+          "resp_result": {
+            "result": {
+              "promotion_links": [
+                {
+                  "promotion_link": "https://s.click.aliexpress.com/e/_configured"
+                }
+              ]
+            },
+            "resp_code": 200
+          }
+        }
+        """);
+        var client = new AliExpressAffiliateClient(
+            new HttpClient(handler),
+            CreateOptions(),
+            () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
+
+        var result = await client.GenerateAffiliateLinkAsync(
+            "https://pt.aliexpress.com/item/1005006356702381.html");
+
+        result!.AffiliateUrl.Should().Be("https://s.click.aliexpress.com/e/_configured");
+        handler.Requests[0].RequestBody.Should().Contain("tracking_id=telegram_greco");
+    }
+
+    [Fact]
+    public async Task GenerateAffiliateLinkAsync_WithoutDefaultOptions_ShouldAskCallerToPassOptions()
+    {
+        var client = new AliExpressAffiliateClient(new HttpClient(new QueueingHandler()));
+
+        Func<Task> act = async () => await client.GenerateAffiliateLinkAsync(
+            "https://pt.aliexpress.com/item/1005006356702381.html");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Pass options to this method*");
+    }
+
+    [Fact]
+    public async Task AddAliExpressAffiliate_WithConfiguration_ShouldRegisterClientWithDefaultOptions()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AliExpress:Affiliate:Endpoint"] = "https://api-sg.aliexpress.com/sync",
+                ["AliExpress:Affiliate:AppKey"] = "534190",
+                ["AliExpress:Affiliate:AppSecret"] = "app-secret",
+                ["AliExpress:Affiliate:TrackingId"] = "telegram_greco",
+                ["AliExpress:Affiliate:SignMethod"] = "md5",
+                ["AliExpress:Affiliate:PromotionLinkType"] = "0",
+                ["AliExpress:Affiliate:ShipToCountry"] = "BR",
+                ["AliExpress:Affiliate:TargetCurrency"] = "BRL",
+                ["AliExpress:Affiliate:TargetLanguage"] = "PT"
+            })
+            .Build();
+        var handler = new QueueingHandler("""
+        {
+          "resp_result": {
+            "result": {
+              "promotion_links": [
+                {
+                  "promotion_link": "https://s.click.aliexpress.com/e/_di"
+                }
+              ]
+            },
+            "resp_code": 200
+          }
+        }
+        """);
+        var services = new ServiceCollection()
+            .AddAliExpressAffiliate(configuration);
+        services.AddSingleton<HttpMessageHandler>(handler);
+        services.ConfigureHttpClientDefaults(builder =>
+            builder.ConfigurePrimaryHttpMessageHandler(sp => sp.GetRequiredService<HttpMessageHandler>()));
+
+        using var provider = services.BuildServiceProvider();
+        var client = provider.GetRequiredService<AliExpressAffiliateClient>();
+
+        var result = await client.GenerateAffiliateLinkAsync(
+            "https://pt.aliexpress.com/item/1005006356702381.html");
+
+        result!.AffiliateUrl.Should().Be("https://s.click.aliexpress.com/e/_di");
+        handler.Requests[0].RequestBody.Should().Contain("tracking_id=telegram_greco");
+    }
+
+    [Fact]
+    public async Task AddAliExpressAffiliate_WithConfigureAction_ShouldRegisterClientWithDefaultOptions()
+    {
+        var handler = new QueueingHandler("""
+        {
+          "resp_result": {
+            "result": {
+              "promotion_links": [
+                {
+                  "promotion_link": "https://s.click.aliexpress.com/e/_action"
+                }
+              ]
+            },
+            "resp_code": 200
+          }
+        }
+        """);
+        var services = new ServiceCollection()
+            .AddAliExpressAffiliate(options =>
+            {
+                options.AppKey = "534190";
+                options.AppSecret = "app-secret";
+                options.TrackingId = "telegram_greco";
+                options.SignMethod = "md5";
+                options.PromotionLinkType = "0";
+            });
+        services.AddSingleton<HttpMessageHandler>(handler);
+        services.ConfigureHttpClientDefaults(builder =>
+            builder.ConfigurePrimaryHttpMessageHandler(sp => sp.GetRequiredService<HttpMessageHandler>()));
+
+        using var provider = services.BuildServiceProvider();
+        var client = provider.GetRequiredService<AliExpressAffiliateClient>();
+
+        var result = await client.GenerateAffiliateLinkAsync(
+            "https://pt.aliexpress.com/item/1005006356702381.html");
+
+        result!.AffiliateUrl.Should().Be("https://s.click.aliexpress.com/e/_action");
     }
 
     [Fact]

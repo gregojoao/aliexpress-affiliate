@@ -10,18 +10,18 @@ public sealed class AliExpressAffiliateOptions
     public const string DefaultPromotionLinkType = "0";
     public const int DefaultTimeoutMilliseconds = 90000;
 
-    public string Endpoint { get; init; } = DefaultEndpoint;
-    public string AppKey { get; init; } = string.Empty;
-    public string AppSecret { get; init; } = string.Empty;
-    public string TrackingId { get; init; } = string.Empty;
-    public string AppSignature { get; init; } = string.Empty;
-    public string SignMethod { get; init; } = DefaultSignMethod;
-    public string PromotionLinkType { get; init; } = DefaultPromotionLinkType;
-    public string ShipToCountry { get; init; } = string.Empty;
-    public string TargetCurrency { get; init; } = string.Empty;
-    public string TargetLanguage { get; init; } = string.Empty;
-    public bool IncludeProductDetails { get; init; }
-    public int TimeoutMilliseconds { get; init; } = DefaultTimeoutMilliseconds;
+    public string Endpoint { get; set; } = DefaultEndpoint;
+    public string AppKey { get; set; } = string.Empty;
+    public string AppSecret { get; set; } = string.Empty;
+    public string TrackingId { get; set; } = string.Empty;
+    public string AppSignature { get; set; } = string.Empty;
+    public string SignMethod { get; set; } = DefaultSignMethod;
+    public string PromotionLinkType { get; set; } = DefaultPromotionLinkType;
+    public string ShipToCountry { get; set; } = string.Empty;
+    public string TargetCurrency { get; set; } = string.Empty;
+    public string TargetLanguage { get; set; } = string.Empty;
+    public bool IncludeProductDetails { get; set; }
+    public int TimeoutMilliseconds { get; set; } = DefaultTimeoutMilliseconds;
 
     public void Validate()
     {
