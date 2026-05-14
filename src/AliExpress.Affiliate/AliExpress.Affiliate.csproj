@@ -12,7 +12,7 @@
     <PackageTags>aliexpress;affiliate;open-platform;links;ecommerce</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/your-user/AliExpress.Affiliate</RepositoryUrl>
+    <RepositoryUrl>https://github.com/gregojoao/aliexpress-affiliate</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
