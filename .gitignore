@@ -3,7 +3,13 @@ obj/
 .vs/
 .vscode/
 TestResults/
+artifacts/
+coverage/
 *.user
 *.suo
+*.env
+*.log
+*.trx
+*.binlog
 *.nupkg
 *.snupkg
