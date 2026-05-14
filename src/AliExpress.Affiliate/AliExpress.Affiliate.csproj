@@ -5,8 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>AliExpress.Affiliate</PackageId>
-    <Version>1.0.0</Version>
-    <Authors>Joao Greco</Authors>
+    <Version>1.0.1</Version>
+    <Authors>Greco Labs</Authors>
     <PackageOwners>Greco Labs</PackageOwners>
     <Company>Greco Labs</Company>
     <Copyright>Copyright (c) 2026 Greco Labs</Copyright>
