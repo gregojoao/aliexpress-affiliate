@@ -7,7 +7,9 @@
     <PackageId>AliExpress.Affiliate</PackageId>
     <Version>0.1.0</Version>
     <Authors>Joao Greco</Authors>
-    <Company>Joao Greco</Company>
+    <PackageOwners>Greco Labs</PackageOwners>
+    <Company>Greco Labs</Company>
+    <Copyright>Copyright (c) 2026 Greco Labs</Copyright>
     <Title>AliExpress Affiliate SDK for .NET</Title>
     <Description>.NET SDK for AliExpress Open Platform affiliate APIs, including affiliate link generation, product discovery, promotions, categories, product details, and order lookups.</Description>
     <PackageTags>aliexpress;affiliate;open-platform;sdk;links;ecommerce;products;orders;promotions</PackageTags>
