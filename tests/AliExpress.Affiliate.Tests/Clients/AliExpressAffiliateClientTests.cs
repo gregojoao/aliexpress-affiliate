@@ -1,11 +1,16 @@
-using System.Net;
-using System.Text;
+using AliExpress.Affiliate.Application.Requests;
+using AliExpress.Affiliate.Clients;
+using AliExpress.Affiliate.Configuration;
+using AliExpress.Affiliate.DependencyInjection;
+using AliExpress.Affiliate.Exceptions;
+using AliExpress.Affiliate.OpenPlatform;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Xunit;
+using System.Net;
+using System.Text;
 
-namespace AliExpress.Affiliate.Tests;
+namespace AliExpress.Affiliate.Tests.Clients;
 
 public class AliExpressAffiliateClientTests
 {
@@ -25,7 +30,7 @@ public class AliExpressAffiliateClientTests
             ["v"] = "2.0"
         };
 
-        var signature = AliExpressAffiliateClient.CreateTopSignature(
+        var signature = AliExpressOpenPlatformDiagnostics.CreateTopSignature(
             parameters,
             "secret",
             "md5");
@@ -36,8 +41,9 @@ public class AliExpressAffiliateClientTests
     [Fact]
     public void BuildLinkGenerateRequest_ShouldUseAliExpressOpenPlatformShape()
     {
-        var request = AliExpressAffiliateClient.BuildLinkGenerateRequest(
+        var request = AliExpressOpenPlatformDiagnostics.BuildLinkGenerateRequest(
             "https://pt.aliexpress.com/item/1005006860981590.html",
+            new AliExpressAffiliateLinkRequest(),
             CreateOptions(),
             DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
 
@@ -56,7 +62,7 @@ public class AliExpressAffiliateClientTests
     [Fact]
     public void BuildProductDetailRequest_ShouldUseProductDetailParameters()
     {
-        var request = AliExpressAffiliateClient.BuildProductDetailRequest(
+        var request = AliExpressOpenPlatformDiagnostics.BuildProductDetailRequest(
             "1005010592960109",
             CreateOptions(),
             DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
@@ -74,7 +80,7 @@ public class AliExpressAffiliateClientTests
     [Fact]
     public void BuildApiRequest_ShouldSignGenericAffiliateMethods()
     {
-        var request = AliExpressAffiliateClient.BuildApiRequest(
+        var request = AliExpressOpenPlatformDiagnostics.BuildApiRequest(
             "aliexpress.affiliate.product.query",
             CreateOptions(),
             DateTimeOffset.FromUnixTimeMilliseconds(1778688000000),
@@ -143,8 +149,12 @@ public class AliExpressAffiliateClientTests
             () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
 
         var result = await client.GenerateAffiliateLinkAsync(
-            "https://pt.aliexpress.com/item/1005006356702381.html?spm=abc",
-            CreateOptions(includeProductDetails: true));
+            new AliExpressAffiliateLinkRequest
+            {
+                ProductUrl = "https://pt.aliexpress.com/item/1005006356702381.html?spm=abc",
+                IncludeProductDetails = true
+            },
+            CreateOptions());
 
         result.Should().NotBeNull();
         result!.AffiliateUrl.Should().Be("https://s.click.aliexpress.com/e/_generated");
@@ -159,6 +169,70 @@ public class AliExpressAffiliateClientTests
         handler.Requests[0].RequestBody.Should().NotContain("promotion_link_type=2");
         handler.Requests[1].RequestBody.Should().Contain("method=aliexpress.affiliate.productdetail.get");
         handler.Requests[1].RequestBody.Should().Contain("product_ids=1005006356702381");
+    }
+
+    [Fact]
+    public async Task GenerateAffiliateLinkAsync_WithProductDetailsAndRequestOverrides_ShouldUseOverridesForDetailRequest()
+    {
+        var handler = new QueueingHandler(
+            """
+            {
+              "resp_result": {
+                "result": {
+                  "promotion_links": [
+                    {
+                      "promotion_link": "https://s.click.aliexpress.com/e/_generated"
+                    }
+                  ]
+                },
+                "resp_code": 200
+              }
+            }
+            """,
+            """
+            {
+              "resp_result": {
+                "result": {
+                  "products": {
+                    "product": [
+                      {
+                        "product_title": "Produto",
+                        "target_sale_price": "10.00",
+                        "target_sale_price_currency": "USD",
+                        "product_detail_url": "https://pt.aliexpress.com/item/1005006356702381.html"
+                      }
+                    ]
+                  }
+                },
+                "resp_code": 200
+              }
+            }
+            """);
+        var client = new AliExpressAffiliateClient(
+            new HttpClient(handler),
+            () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
+
+        await client.GenerateAffiliateLinkAsync(
+            new AliExpressAffiliateLinkRequest
+            {
+                ProductUrl = "https://pt.aliexpress.com/item/1005006356702381.html",
+                IncludeProductDetails = true,
+                TrackingId = "request-tracking",
+                PromotionLinkType = "2",
+                ShipToCountryCode = "US",
+                TargetCurrency = "USD",
+                TargetLanguage = "EN"
+            },
+            CreateOptions());
+
+        handler.Requests.Should().HaveCount(2);
+        handler.Requests[0].RequestBody.Should().Contain("tracking_id=request-tracking");
+        handler.Requests[0].RequestBody.Should().Contain("promotion_link_type=2");
+        handler.Requests[1].RequestBody.Should().Contain("tracking_id=request-tracking");
+        handler.Requests[1].RequestBody.Should().Contain("ship_to_country=US");
+        handler.Requests[1].RequestBody.Should().Contain("country=US");
+        handler.Requests[1].RequestBody.Should().Contain("target_currency=USD");
+        handler.Requests[1].RequestBody.Should().Contain("target_language=EN");
     }
 
     [Fact]
@@ -184,7 +258,10 @@ public class AliExpressAffiliateClientTests
             () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
 
         var result = await client.GenerateAffiliateLinkAsync(
-            "https://pt.aliexpress.com/item/1005006356702381.html");
+            new AliExpressAffiliateLinkRequest
+            {
+                ProductUrl = "https://pt.aliexpress.com/item/1005006356702381.html"
+            });
 
         result!.AffiliateUrl.Should().Be("https://s.click.aliexpress.com/e/_configured");
         handler.Requests[0].RequestBody.Should().Contain("tracking_id=telegram_greco");
@@ -196,9 +273,12 @@ public class AliExpressAffiliateClientTests
         var client = new AliExpressAffiliateClient(new HttpClient(new QueueingHandler()));
 
         Func<Task> act = async () => await client.GenerateAffiliateLinkAsync(
-            "https://pt.aliexpress.com/item/1005006356702381.html");
+            new AliExpressAffiliateLinkRequest
+            {
+                ProductUrl = "https://pt.aliexpress.com/item/1005006356702381.html"
+            });
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
+        await act.Should().ThrowAsync<AliExpressAffiliateValidationException>()
             .WithMessage("*Pass options to this method*");
     }
 
@@ -208,15 +288,15 @@ public class AliExpressAffiliateClientTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["AliExpress:Affiliate:Endpoint"] = "https://api-sg.aliexpress.com/sync",
+                ["AliExpress:Affiliate:ApiEndpoint"] = "https://api-sg.aliexpress.com/sync",
                 ["AliExpress:Affiliate:AppKey"] = "534190",
                 ["AliExpress:Affiliate:AppSecret"] = "app-secret",
-                ["AliExpress:Affiliate:TrackingId"] = "telegram_greco",
+                ["AliExpress:Affiliate:DefaultTrackingId"] = "telegram_greco",
                 ["AliExpress:Affiliate:SignMethod"] = "md5",
-                ["AliExpress:Affiliate:PromotionLinkType"] = "0",
-                ["AliExpress:Affiliate:ShipToCountry"] = "BR",
-                ["AliExpress:Affiliate:TargetCurrency"] = "BRL",
-                ["AliExpress:Affiliate:TargetLanguage"] = "PT"
+                ["AliExpress:Affiliate:DefaultPromotionLinkType"] = "0",
+                ["AliExpress:Affiliate:DefaultShipToCountry"] = "BR",
+                ["AliExpress:Affiliate:DefaultTargetCurrency"] = "BRL",
+                ["AliExpress:Affiliate:DefaultTargetLanguage"] = "PT"
             })
             .Build();
         var handler = new QueueingHandler("""
@@ -240,10 +320,13 @@ public class AliExpressAffiliateClientTests
             builder.ConfigurePrimaryHttpMessageHandler(sp => sp.GetRequiredService<HttpMessageHandler>()));
 
         using var provider = services.BuildServiceProvider();
-        var client = provider.GetRequiredService<AliExpressAffiliateClient>();
+        var client = provider.GetRequiredService<IAliExpressAffiliateClient>();
 
         var result = await client.GenerateAffiliateLinkAsync(
-            "https://pt.aliexpress.com/item/1005006356702381.html");
+            new AliExpressAffiliateLinkRequest
+            {
+                ProductUrl = "https://pt.aliexpress.com/item/1005006356702381.html"
+            });
 
         result!.AffiliateUrl.Should().Be("https://s.click.aliexpress.com/e/_di");
         handler.Requests[0].RequestBody.Should().Contain("tracking_id=telegram_greco");
@@ -271,9 +354,9 @@ public class AliExpressAffiliateClientTests
             {
                 options.AppKey = "534190";
                 options.AppSecret = "app-secret";
-                options.TrackingId = "telegram_greco";
+                options.DefaultTrackingId = "telegram_greco";
                 options.SignMethod = "md5";
-                options.PromotionLinkType = "0";
+                options.DefaultPromotionLinkType = "0";
             });
         services.AddSingleton<HttpMessageHandler>(handler);
         services.ConfigureHttpClientDefaults(builder =>
@@ -283,7 +366,10 @@ public class AliExpressAffiliateClientTests
         var client = provider.GetRequiredService<AliExpressAffiliateClient>();
 
         var result = await client.GenerateAffiliateLinkAsync(
-            "https://pt.aliexpress.com/item/1005006356702381.html");
+            new AliExpressAffiliateLinkRequest
+            {
+                ProductUrl = "https://pt.aliexpress.com/item/1005006356702381.html"
+            });
 
         result!.AffiliateUrl.Should().Be("https://s.click.aliexpress.com/e/_action");
     }
@@ -317,10 +403,13 @@ public class AliExpressAffiliateClientTests
             () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
 
         var result = await client.GenerateAffiliateLinksAsync(
-            new[]
+            new AliExpressAffiliateLinksRequest
             {
-                "https://pt.aliexpress.com/item/1005006356702381.html?spm=abc",
-                "https://pt.aliexpress.com/item/1005006860981590.html"
+                SourceUrls = new[]
+                {
+                    "https://pt.aliexpress.com/item/1005006356702381.html?spm=abc",
+                    "https://pt.aliexpress.com/item/1005006860981590.html"
+                }
             },
             CreateOptions());
 
@@ -345,7 +434,7 @@ public class AliExpressAffiliateClientTests
         var query = new AliExpressProductQuery
         {
             Keywords = "microfone",
-            PageNo = 2,
+            PageNumber = 2,
             PageSize = 20,
             Sort = "SALE_PRICE_ASC"
         };
@@ -354,7 +443,7 @@ public class AliExpressAffiliateClientTests
             ? await client.SearchProductsAsync(query, CreateOptions())
             : await client.GetHotProductsAsync(query, CreateOptions());
 
-        result.CurrentPageNo.Should().Be(2);
+        result.CurrentPageNumber.Should().Be(2);
         result.TotalRecordCount.Should().Be(123);
         result.Items.Should().HaveCount(1);
         result.Items[0].ProductId.Should().Be("1005006356702381");
@@ -379,8 +468,8 @@ public class AliExpressAffiliateClientTests
             new AliExpressHotProductDownloadQuery
             {
                 CategoryId = "111",
-                LocaleSite = "global",
-                PageNo = 1,
+                Locale = "global",
+                PageNumber = 1,
                 PageSize = 10
             },
             CreateOptions());
@@ -498,7 +587,7 @@ public class AliExpressAffiliateClientTests
             {
                 DeviceId = "device-123",
                 Keywords = "microfone",
-                PageNo = 1
+                PageNumber = 1
             },
             CreateOptions());
 
@@ -522,21 +611,21 @@ public class AliExpressAffiliateClientTests
         var orders = await client.GetOrdersAsync(
             new AliExpressOrderListQuery
             {
-                StartTime = "2026-05-01 00:00:00",
-                EndTime = "2026-05-02 00:00:00",
+                StartTime = new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero),
+                EndTime = new DateTimeOffset(2026, 5, 2, 0, 0, 0, TimeSpan.Zero),
                 Status = "Payment Completed",
-                PageNo = 1,
+                PageNumber = 1,
                 PageSize = 20
             },
             CreateOptions());
         var details = await client.GetOrderDetailsAsync(
-            new AliExpressOrderDetailsQuery { OrderIds = "222222" },
+            new AliExpressOrderDetailsQuery { OrderIds = new[] { "222222" } },
             CreateOptions());
         var byIndex = await client.GetOrdersByIndexAsync(
             new AliExpressOrderListByIndexQuery
             {
-                StartTime = "2026-05-01 00:00:00",
-                EndTime = "2026-05-02 00:00:00",
+                StartTime = new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero),
+                EndTime = new DateTimeOffset(2026, 5, 2, 0, 0, 0, TimeSpan.Zero),
                 Status = "Payment Completed",
                 TimeType = "Payment Completed Time",
                 StartQueryIndexId = "1000"
@@ -577,7 +666,10 @@ public class AliExpressAffiliateClientTests
             () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
 
         Func<Task> act = async () => await client.GenerateAffiliateLinkAsync(
-            "https://pt.aliexpress.com/item/1005008652606983.html?spm=abc",
+            new AliExpressAffiliateLinkRequest
+            {
+                ProductUrl = "https://pt.aliexpress.com/item/1005008652606983.html?spm=abc"
+            },
             CreateOptions());
 
         await act.Should()
@@ -591,7 +683,7 @@ public class AliExpressAffiliateClientTests
     [Fact]
     public void NormalizeAliExpressUrl_WithAnyAliExpressHtmlUrl_ShouldTrimAfterHtml()
     {
-        var normalized = AliExpressAffiliateClient.NormalizeAliExpressUrl(
+        var normalized = AliExpressOpenPlatformDiagnostics.NormalizeAliExpressUrl(
             "https://campaign.aliexpress.com/wow/gcp/some-page.html?spm=abc#section");
 
         normalized.Should().Be("https://campaign.aliexpress.com/wow/gcp/some-page.html");
@@ -615,7 +707,7 @@ public class AliExpressAffiliateClientTests
         }
         """;
 
-        var affiliateUrl = AliExpressAffiliateClient.ExtractAffiliateUrl(responseBody);
+        var affiliateUrl = AliExpressOpenPlatformDiagnostics.ExtractAffiliateUrl(responseBody);
 
         affiliateUrl.Should().BeEmpty();
     }
@@ -627,26 +719,25 @@ public class AliExpressAffiliateClientTests
         string url,
         string expectedProductId)
     {
-        var extracted = AliExpressAffiliateClient.TryExtractProductId(url, out var productId);
+        var extracted = AliExpressOpenPlatformDiagnostics.TryExtractProductId(url, out var productId);
 
         extracted.Should().BeTrue();
         productId.Should().Be(expectedProductId);
     }
 
-    private static AliExpressAffiliateOptions CreateOptions(bool includeProductDetails = false)
+    private static AliExpressAffiliateOptions CreateOptions()
     {
         return new AliExpressAffiliateOptions
         {
-            Endpoint = "https://api-sg.aliexpress.com/sync",
+            ApiEndpoint = "https://api-sg.aliexpress.com/sync",
             AppKey = "534190",
             AppSecret = "app-secret",
-            TrackingId = "telegram_greco",
+            DefaultTrackingId = "telegram_greco",
             SignMethod = "md5",
-            PromotionLinkType = "0",
-            ShipToCountry = "BR",
-            TargetCurrency = "BRL",
-            TargetLanguage = "PT",
-            IncludeProductDetails = includeProductDetails
+            DefaultPromotionLinkType = "0",
+            DefaultShipToCountry = "BR",
+            DefaultTargetCurrency = "BRL",
+            DefaultTargetLanguage = "PT"
         };
     }
 

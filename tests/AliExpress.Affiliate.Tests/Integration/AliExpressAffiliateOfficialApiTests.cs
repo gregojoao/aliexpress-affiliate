@@ -1,7 +1,10 @@
+using AliExpress.Affiliate.Application.Requests;
+using AliExpress.Affiliate.Clients;
+using AliExpress.Affiliate.Configuration;
 using FluentAssertions;
 using Xunit.Abstractions;
 
-namespace AliExpress.Affiliate.Tests;
+namespace AliExpress.Affiliate.Tests.Integration;
 
 public class AliExpressAffiliateOfficialApiTests
 {
@@ -51,7 +54,13 @@ public class AliExpressAffiliateOfficialApiTests
         using var httpClient = new HttpClient();
         var client = new AliExpressAffiliateClient(httpClient);
 
-        var result = await client.GenerateAffiliateLinkAsync(productUrl, options);
+        var result = await client.GenerateAffiliateLinkAsync(
+            new AliExpressAffiliateLinkRequest
+            {
+                ProductUrl = productUrl,
+                IncludeProductDetails = true
+            },
+            options);
 
         result.Should().NotBeNull();
         result!.AffiliateUrl.Should().NotBeNullOrWhiteSpace();
@@ -76,7 +85,7 @@ public class AliExpressAffiliateOfficialApiTests
             new AliExpressProductQuery
             {
                 Keywords = "microfone",
-                PageNo = 1,
+                PageNumber = 1,
                 PageSize = 5
             },
             options);
@@ -84,7 +93,7 @@ public class AliExpressAffiliateOfficialApiTests
             new AliExpressProductQuery
             {
                 Keywords = "fone bluetooth",
-                PageNo = 1,
+                PageNumber = 1,
                 PageSize = 5
             },
             options);
@@ -111,7 +120,7 @@ public class AliExpressAffiliateOfficialApiTests
             new AliExpressHotProductDownloadQuery
             {
                 CategoryId = "7",
-                PageNo = 1,
+                PageNumber = 1,
                 PageSize = 5
             },
             options);
@@ -133,7 +142,7 @@ public class AliExpressAffiliateOfficialApiTests
 
         if (string.IsNullOrWhiteSpace(options.AppKey) ||
             string.IsNullOrWhiteSpace(options.AppSecret) ||
-            string.IsNullOrWhiteSpace(options.TrackingId))
+            string.IsNullOrWhiteSpace(options.DefaultTrackingId))
         {
             _output.WriteLine(
                 "Official AliExpress API tests require ALIEXPRESS_AFFILIATE_APP_KEY, " +
@@ -144,17 +153,16 @@ public class AliExpressAffiliateOfficialApiTests
 
         officialOptions = new AliExpressAffiliateOptions
         {
-            Endpoint = options.Endpoint,
+            ApiEndpoint = options.ApiEndpoint,
             AppKey = options.AppKey,
             AppSecret = options.AppSecret,
-            TrackingId = options.TrackingId,
+            DefaultTrackingId = options.DefaultTrackingId,
             AppSignature = options.AppSignature,
             SignMethod = options.SignMethod,
-            PromotionLinkType = options.PromotionLinkType,
-            ShipToCountry = options.ShipToCountry,
-            TargetCurrency = options.TargetCurrency,
-            TargetLanguage = options.TargetLanguage,
-            IncludeProductDetails = includeProductDetails,
+            DefaultPromotionLinkType = options.DefaultPromotionLinkType,
+            DefaultShipToCountry = options.DefaultShipToCountry,
+            DefaultTargetCurrency = options.DefaultTargetCurrency,
+            DefaultTargetLanguage = options.DefaultTargetLanguage,
             TimeoutMilliseconds = options.TimeoutMilliseconds
         };
 
