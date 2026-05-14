@@ -1,0 +1,117 @@
+using FluentAssertions;
+using Xunit.Abstractions;
+
+namespace AliExpress.Affiliate.Tests;
+
+public class AliExpressAffiliateOfficialApiTests
+{
+    private readonly ITestOutputHelper _output;
+
+    public AliExpressAffiliateOfficialApiTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task GetProductDetailsAsync_WithOfficialApi_ShouldReturnProductDetails()
+    {
+        if (!TryCreateOfficialOptions(out var options) ||
+            !TryGetValue(
+            "ALIEXPRESS_AFFILIATE_TEST_PRODUCT_ID_OR_URL",
+            "Set ALIEXPRESS_AFFILIATE_TEST_PRODUCT_ID_OR_URL to a product ID or URL that is valid for your AliExpress account.",
+            out var productIdOrUrl))
+        {
+            return;
+        }
+
+        using var httpClient = new HttpClient();
+        var client = new AliExpressAffiliateClient(httpClient);
+
+        var details = await client.GetProductDetailsAsync(productIdOrUrl, options);
+
+        details.Should().NotBeNull();
+        details!.ProductTitle.Should().NotBeNullOrWhiteSpace();
+        details.ProductUrl.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task GenerateAffiliateLinkAsync_WithOfficialApi_ShouldReturnPromotionLink()
+    {
+        if (!TryCreateOfficialOptions(out var options, includeProductDetails: true) ||
+            !TryGetValue(
+            "ALIEXPRESS_AFFILIATE_TEST_PRODUCT_URL",
+            "Set ALIEXPRESS_AFFILIATE_TEST_PRODUCT_URL to a product URL that can generate an affiliate link for your account.",
+            out var productUrl))
+        {
+            return;
+        }
+
+        using var httpClient = new HttpClient();
+        var client = new AliExpressAffiliateClient(httpClient);
+
+        var result = await client.GenerateAffiliateLinkAsync(productUrl, options);
+
+        result.Should().NotBeNull();
+        result!.AffiliateUrl.Should().NotBeNullOrWhiteSpace();
+        result.AffiliateUrl.Should().StartWith("http");
+        result.SourceUrl.Should().Contain(".html");
+    }
+
+    private bool TryCreateOfficialOptions(
+        out AliExpressAffiliateOptions officialOptions,
+        bool includeProductDetails = false)
+    {
+        var options = AliExpressAffiliateEnvironment.FromDictionary(
+            Environment.GetEnvironmentVariables()
+                .Cast<System.Collections.DictionaryEntry>()
+                .ToDictionary(
+                    entry => entry.Key?.ToString() ?? string.Empty,
+                    entry => entry.Value?.ToString() ?? string.Empty));
+
+        if (string.IsNullOrWhiteSpace(options.AppKey) ||
+            string.IsNullOrWhiteSpace(options.AppSecret) ||
+            string.IsNullOrWhiteSpace(options.TrackingId))
+        {
+            _output.WriteLine(
+                "Official AliExpress API tests require ALIEXPRESS_AFFILIATE_APP_KEY, " +
+                "ALIEXPRESS_AFFILIATE_APP_SECRET and ALIEXPRESS_TRACKING_ID.");
+            officialOptions = options;
+            return false;
+        }
+
+        officialOptions = new AliExpressAffiliateOptions
+        {
+            Endpoint = options.Endpoint,
+            AppKey = options.AppKey,
+            AppSecret = options.AppSecret,
+            TrackingId = options.TrackingId,
+            AppSignature = options.AppSignature,
+            SignMethod = options.SignMethod,
+            PromotionLinkType = options.PromotionLinkType,
+            ShipToCountry = options.ShipToCountry,
+            TargetCurrency = options.TargetCurrency,
+            TargetLanguage = options.TargetLanguage,
+            IncludeProductDetails = includeProductDetails,
+            TimeoutMilliseconds = options.TimeoutMilliseconds
+        };
+
+        return true;
+    }
+
+    private bool TryGetValue(
+        string key,
+        string skipReason,
+        out string value)
+    {
+        value = Environment.GetEnvironmentVariable(key)?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _output.WriteLine(skipReason);
+            return false;
+        }
+
+        return true;
+    }
+}

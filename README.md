@@ -159,6 +159,24 @@ dotnet pack src/AliExpress.Affiliate/AliExpress.Affiliate.csproj -c Release
 
 The repository includes a GitHub Actions workflow that builds, tests, packs, and uploads the generated NuGet package as a workflow artifact.
 
+## Official API Smoke Tests
+
+The test project includes opt-in integration tests that call the official AliExpress API. They are skipped unless credentials and test products are configured through environment variables:
+
+```bash
+ALIEXPRESS_AFFILIATE_APP_KEY=<your-app-key>
+ALIEXPRESS_AFFILIATE_APP_SECRET=<your-app-secret>
+ALIEXPRESS_TRACKING_ID=<your-tracking-id>
+ALIEXPRESS_AFFILIATE_TEST_PRODUCT_ID_OR_URL=<product-id-or-url>
+ALIEXPRESS_AFFILIATE_TEST_PRODUCT_URL=<affiliate-enabled-product-url>
+```
+
+Run only the official API tests with:
+
+```bash
+dotnet test --filter Category=Integration
+```
+
 ## Contributing
 
 Issues and pull requests are welcome. Please keep changes focused, add or update tests when behavior changes, and run `dotnet test` before opening a pull request.
