@@ -1,105 +1,105 @@
 # AliExpress.Affiliate
 
-> A lightweight, strongly typed .NET SDK for the AliExpress Open Platform affiliate APIs.
+> A lightweight, strongly typed .NET SDK for AliExpress Open Platform affiliate APIs.
 
 [![CI](https://github.com/gregojoao/aliexpress-affiliate/actions/workflows/ci.yml/badge.svg)](https://github.com/gregojoao/aliexpress-affiliate/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/AliExpress.Affiliate.svg)](https://www.nuget.org/packages/AliExpress.Affiliate)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-8.0%2B-512BD4.svg)](https://dotnet.microsoft.com/)
 
-`AliExpress.Affiliate` helps .NET applications generate affiliate links, discover products, fetch product details, read promotions, query orders, and sign TOP-style AliExpress Open Platform requests.
+`AliExpress.Affiliate` helps .NET applications generate affiliate links, discover products, fetch product details, read promotions, query orders, and handle AliExpress affiliate API responses with typed contracts.
 
 It also handles a common edge case from the affiliate API: successful responses that return only `source_value` instead of a usable `promotion_link`.
 
 ## Highlights
 
-- Generate single or batch affiliate links with `aliexpress.affiliate.link.generate`
-- Fetch product details with `aliexpress.affiliate.productdetail.get`
-- Search products with `aliexpress.affiliate.product.query`
-- Fetch hot products, hot product downloads, categories, featured promotions, and smart match recommendations
-- Query affiliate orders by page, by order IDs, or by query index
-- Sign Open Platform requests with `md5`, `hmac-md5`, or `hmac-sha256`
-- Normalize AliExpress product URLs by trimming tracking parameters after `.html`
-- Parse title, current price, original price, image URL, product URL, and promotion link
-- Detect non-affiliate products with a dedicated exception
-- Load options from dictionaries or configuration-style environment values
-
-## Contents
-
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Dependency Injection](#dependency-injection)
-- [API Examples](#api-examples)
-- [Configuration](#configuration)
-- [Error Handling](#error-handling)
-- [Project Structure](#project-structure)
-- [Development](#development)
-- [Official API Smoke Tests](#official-api-smoke-tests)
-- [Contributing](#contributing)
-- [License](#license)
-
-## Requirements
-
-| Requirement | Version / Notes |
-| --- | --- |
-| .NET SDK | `10.0` or newer |
-| AliExpress credentials | Open Platform app key and app secret |
-| Affiliate tracking | AliExpress affiliate tracking ID |
+- Generate single or batch affiliate links with explicit request objects
+- Fetch product details, product discovery results, categories, featured promotions, and orders
+- Register and inject `IAliExpressAffiliateClient`
+- Keep credentials/defaults in `AliExpressAffiliateOptions`
+- Override tracking, country, language, currency, and product-detail behavior per request
+- Use dedicated SDK exceptions for HTTP, API, and unavailable affiliate-link failures
+- Keep Open Platform signing/parsing helpers outside the main client via diagnostics APIs
 
 ## Installation
-
-Install from NuGet:
 
 ```bash
 dotnet add package AliExpress.Affiliate
 ```
 
-Or pack the project locally:
+Or pack locally:
 
 ```bash
 dotnet pack src/AliExpress.Affiliate/AliExpress.Affiliate.csproj -c Release -o artifacts
 ```
 
-Then install from the local package source as needed:
+## Namespaces
 
-```bash
-dotnet add <consumer-project>.csproj package AliExpress.Affiliate --source ./artifacts
+Most applications use these namespaces:
+
+```csharp
+using AliExpress.Affiliate;
+using AliExpress.Affiliate.Application.Requests;
+using AliExpress.Affiliate.Clients;
+using AliExpress.Affiliate.Configuration;
+using AliExpress.Affiliate.Domain;
+```
+
+Dependency injection extensions are in their own namespace:
+
+```csharp
+using AliExpress.Affiliate.DependencyInjection;
+```
+
+SDK exceptions are grouped under:
+
+```csharp
+using AliExpress.Affiliate.Exceptions;
+```
+
+Open Platform diagnostics live separately:
+
+```csharp
+using AliExpress.Affiliate.OpenPlatform;
 ```
 
 ## Quick Start
 
 ```csharp
 using AliExpress.Affiliate;
+using AliExpress.Affiliate.Application.Requests;
+using AliExpress.Affiliate.Clients;
+using AliExpress.Affiliate.Configuration;
 
 var options = new AliExpressAffiliateOptions
 {
     AppKey = "<your-app-key>",
     AppSecret = "<your-app-secret>",
-    TrackingId = "<your-tracking-id>",
+    DefaultTrackingId = "<your-tracking-id>",
     SignMethod = "md5",
-    PromotionLinkType = "0",
-    TargetCurrency = "BRL",
-    TargetLanguage = "PT",
-    ShipToCountry = "BR",
-    IncludeProductDetails = true
+    DefaultPromotionLinkType = "0",
+    DefaultTargetCurrency = "BRL",
+    DefaultTargetLanguage = "PT",
+    DefaultShipToCountry = "BR"
 };
 
 using var httpClient = new HttpClient();
 var client = new AliExpressAffiliateClient(httpClient);
 
 var result = await client.GenerateAffiliateLinkAsync(
-    "https://pt.aliexpress.com/item/1005006356702381.html?spm=abc",
+    new AliExpressAffiliateLinkRequest
+    {
+        ProductUrl = "https://pt.aliexpress.com/item/1005006356702381.html?spm=abc",
+        IncludeProductDetails = true
+    },
     options);
 
 Console.WriteLine(result?.AffiliateUrl);
 Console.WriteLine(result?.ProductTitle);
 Console.WriteLine(result?.ProductPrice);
-Console.WriteLine(result?.ProductOriginalPrice);
 ```
 
 ## Dependency Injection
-
-DI and `IConfiguration` support are optional. You can keep creating `AliExpressAffiliateClient` manually and pass `AliExpressAffiliateOptions` per call, or register default options once and use shorter method overloads.
 
 Register with `appsettings.json`:
 
@@ -109,13 +109,12 @@ Register with `appsettings.json`:
     "Affiliate": {
       "AppKey": "<your-app-key>",
       "AppSecret": "<your-app-secret>",
-      "TrackingId": "<your-tracking-id>",
+      "DefaultTrackingId": "<your-tracking-id>",
       "SignMethod": "md5",
-      "PromotionLinkType": "0",
-      "TargetCurrency": "BRL",
-      "TargetLanguage": "PT",
-      "ShipToCountry": "BR",
-      "IncludeProductDetails": true
+      "DefaultPromotionLinkType": "0",
+      "DefaultTargetCurrency": "BRL",
+      "DefaultTargetLanguage": "PT",
+      "DefaultShipToCountry": "BR"
     }
   }
 }
@@ -132,21 +131,21 @@ builder.Services.AddAliExpressAffiliate(options =>
 {
     options.AppKey = "<your-app-key>";
     options.AppSecret = "<your-app-secret>";
-    options.TrackingId = "<your-tracking-id>";
-    options.TargetCurrency = "BRL";
-    options.TargetLanguage = "PT";
-    options.ShipToCountry = "BR";
+    options.DefaultTrackingId = "<your-tracking-id>";
+    options.DefaultTargetCurrency = "BRL";
+    options.DefaultTargetLanguage = "PT";
+    options.DefaultShipToCountry = "BR";
 });
 ```
 
-Then inject the client:
+Then inject the interface:
 
 ```csharp
 public sealed class ProductLinkService
 {
-    private readonly AliExpressAffiliateClient _client;
+    private readonly IAliExpressAffiliateClient _client;
 
-    public ProductLinkService(AliExpressAffiliateClient client)
+    public ProductLinkService(IAliExpressAffiliateClient client)
     {
         _client = client;
     }
@@ -155,48 +154,55 @@ public sealed class ProductLinkService
         string productUrl,
         CancellationToken cancellationToken = default)
     {
-        return _client.GenerateAffiliateLinkAsync(productUrl, cancellationToken);
+        return _client.GenerateAffiliateLinkAsync(
+            new AliExpressAffiliateLinkRequest
+            {
+                ProductUrl = productUrl,
+                IncludeProductDetails = true
+            },
+            cancellationToken);
     }
 }
 ```
 
-If no default options were registered, use the existing overloads that receive `AliExpressAffiliateOptions` explicitly.
-
 ## API Examples
 
-### Product Details
+### Batch Links
 
-Use `GetProductDetailsAsync` when you only need product metadata. The method accepts either a product ID or an AliExpress product URL.
+```csharp
+var links = await client.GenerateAffiliateLinksAsync(
+    new AliExpressAffiliateLinksRequest
+    {
+        SourceUrls = new[]
+        {
+            "https://pt.aliexpress.com/item/1005006356702381.html",
+            "https://pt.aliexpress.com/item/1005006860981590.html"
+        }
+    },
+    options);
+```
+
+### Product Details
 
 ```csharp
 var details = await client.GetProductDetailsAsync(
     "1005006356702381",
     options);
-
-Console.WriteLine(details?.ProductTitle);
-Console.WriteLine(details?.ProductPrice);
-Console.WriteLine(details?.ProductOriginalPrice);
 ```
 
 ### Product Discovery
-
-Search regular products:
 
 ```csharp
 var products = await client.SearchProductsAsync(
     new AliExpressProductQuery
     {
         Keywords = "microfone",
-        PageNo = 1,
+        PageNumber = 1,
         PageSize = 20,
         Sort = "SALE_PRICE_ASC"
     },
     options);
-```
 
-Fetch hot products:
-
-```csharp
 var hotProducts = await client.GetHotProductsAsync(
     new AliExpressProductQuery
     {
@@ -204,12 +210,6 @@ var hotProducts = await client.GetHotProductsAsync(
         PageSize = 20
     },
     options);
-```
-
-Fetch affiliate categories:
-
-```csharp
-var categories = await client.GetCategoriesAsync(options);
 ```
 
 ### Promotions
@@ -232,41 +232,46 @@ var promoProducts = await client.GetFeaturedPromoProductsAsync(
 var orders = await client.GetOrdersAsync(
     new AliExpressOrderListQuery
     {
-        StartTime = "2026-05-01 00:00:00",
-        EndTime = "2026-05-02 00:00:00",
-        PageNo = 1,
+        StartTime = new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero),
+        EndTime = new DateTimeOffset(2026, 5, 2, 0, 0, 0, TimeSpan.Zero),
+        PageNumber = 1,
         PageSize = 20
     },
     options);
 ```
 
-### Main Client Methods
+Order details accept a list of order IDs and the SDK formats the AliExpress CSV parameter internally:
 
-| Area | Methods |
-| --- | --- |
-| Affiliate links | `GenerateAffiliateLinkAsync`, `GenerateAffiliateLinksAsync` |
-| Products | `GetProductDetailsAsync`, `SearchProductsAsync`, `GetHotProductsAsync`, `GetHotProductDownloadAsync`, `GetSmartMatchProductsAsync` |
-| Categories | `GetCategoriesAsync` |
-| Promotions | `GetFeaturedPromosAsync`, `GetFeaturedPromoProductsAsync` |
-| Orders | `GetOrdersAsync`, `GetOrderDetailsAsync`, `GetOrdersByIndexAsync` |
+```csharp
+var details = await client.GetOrderDetailsAsync(
+    new AliExpressOrderDetailsQuery
+    {
+        OrderIds = new[] { "222222" }
+    },
+    options);
+```
 
 ## Configuration
 
-You can build options directly:
+`AliExpressAffiliateOptions` stores credentials and default request values:
 
-```csharp
-var options = new AliExpressAffiliateOptions
-{
-    AppKey = "<your-app-key>",
-    AppSecret = "<your-app-secret>",
-    TrackingId = "<your-tracking-id>",
-    TargetCurrency = "BRL",
-    TargetLanguage = "PT",
-    ShipToCountry = "BR"
-};
-```
+| Option | Meaning |
+| --- | --- |
+| `ApiEndpoint` | AliExpress Open Platform endpoint |
+| `AppKey` | Open Platform app key |
+| `AppSecret` | Open Platform app secret |
+| `DefaultTrackingId` | Default affiliate tracking ID |
+| `AppSignature` | Optional app signature |
+| `SignMethod` | `md5`, `hmac-md5`, or `hmac-sha256` |
+| `DefaultPromotionLinkType` | Default promotion link type |
+| `DefaultShipToCountry` | Default ship-to country code |
+| `DefaultTargetCurrency` | Default target currency |
+| `DefaultTargetLanguage` | Default target language |
+| `TimeoutMilliseconds` | Request timeout |
 
-Or load them from dictionary/configuration values:
+Per-call behavior such as `IncludeProductDetails` belongs to `AliExpressAffiliateLinkRequest`, not global options.
+
+You can load options from environment-style dictionaries:
 
 ```csharp
 var options = AliExpressAffiliateEnvironment.FromDictionary(new Dictionary<string, string>
@@ -274,50 +279,67 @@ var options = AliExpressAffiliateEnvironment.FromDictionary(new Dictionary<strin
     ["ALIEXPRESS_AFFILIATE_APP_KEY"] = "<your-app-key>",
     ["ALIEXPRESS_AFFILIATE_APP_SECRET"] = "<your-app-secret>",
     ["ALIEXPRESS_TRACKING_ID"] = "<your-tracking-id>",
-    ["ALIEXPRESS_AFFILIATE_API_SIGN_METHOD"] = "md5",
     ["ALIEXPRESS_TARGET_CURRENCY"] = "BRL",
     ["ALIEXPRESS_TARGET_LANGUAGE"] = "PT",
-    ["ALIEXPRESS_SHIP_TO_COUNTRY"] = "BR",
-    ["ALIEXPRESS_AFFILIATE_PRODUCT_DETAIL_ENABLED"] = "true"
+    ["ALIEXPRESS_SHIP_TO_COUNTRY"] = "BR"
 });
 ```
 
-### Supported Configuration Keys
+## Diagnostics
 
-| Option | Keys |
-| --- | --- |
-| Endpoint | `ALIEXPRESS_AFFILIATE_API_ENDPOINT`, `ALIEXPRESS_ENDPOINT` |
-| App key | `ALIEXPRESS_AFFILIATE_APP_KEY`, `ALIEXPRESS_OPEN_API_APP_KEY`, `ALIEXPRESS_APP_KEY` |
-| App secret | `ALIEXPRESS_AFFILIATE_APP_SECRET`, `ALIEXPRESS_OPEN_API_APP_SECRET`, `ALIEXPRESS_APP_SECRET` |
-| Tracking ID | `ALIEXPRESS_TRACKING_ID`, `ALIEXPRESS_AFFILIATE_TRACKING_ID` |
-| Sign method | `ALIEXPRESS_AFFILIATE_API_SIGN_METHOD`, `ALIEXPRESS_SIGN_METHOD` |
-| Product details | `ALIEXPRESS_AFFILIATE_PRODUCT_DETAIL_ENABLED`, `ALIEXPRESS_PRODUCT_DETAIL_ENABLED` |
-| Timeout | `ALIEXPRESS_AFFILIATE_API_TIMEOUT_MS` |
+The main client exposes only SDK operations. Lower-level Open Platform helpers are available through `AliExpressOpenPlatformDiagnostics`:
+
+```csharp
+var signature = AliExpressOpenPlatformDiagnostics.CreateTopSignature(
+    parameters,
+    appSecret: "<secret>",
+    signMethod: "md5");
+
+var normalizedUrl = AliExpressOpenPlatformDiagnostics.NormalizeAliExpressUrl(productUrl);
+```
 
 ## Error Handling
 
-Some AliExpress products cannot generate affiliate links. When the API succeeds but does not return `promotion_link`, the client throws:
+All SDK-specific exceptions derive from `AliExpressAffiliateException`.
+
+| Exception | When it is thrown |
+| --- | --- |
+| `AliExpressAffiliateHttpException` | AliExpress returns a non-success HTTP status |
+| `AliExpressAffiliateApiException` | AliExpress returns an API/business error payload |
+| `AliExpressAffiliateValidationException` | Required SDK options are missing |
+| `AliExpressAffiliateLinkUnavailableException` | Link generation succeeds but no `promotion_link` is returned |
 
 ```csharp
-AliExpressAffiliateLinkUnavailableException
+try
+{
+    var result = await client.GenerateAffiliateLinkAsync(request, options);
+}
+catch (AliExpressAffiliateLinkUnavailableException ex)
+{
+    Console.WriteLine(ex.ResponseSummary);
+}
+catch (AliExpressAffiliateException ex)
+{
+    Console.WriteLine(ex.Message);
+}
 ```
 
-This is different from HTTP, signature, or configuration failures, so callers can route the item to a dedicated retry, fallback, or review flow.
-
 ## Project Structure
-
-The library follows a lightweight DDD-style organization:
 
 ```text
 src/AliExpress.Affiliate/
   Application/      Use cases, request models, and application ports
-  Domain/           Product URL, product ID, price, result, and order rules
+  Clients/          Public client interface and implementation
+  Configuration/    Options and environment/configuration helpers
+  DependencyInjection/
+                    Microsoft.Extensions.DependencyInjection registration
+  Domain/           Product URL, product ID, price, result, and order models
+  Exceptions/       SDK exception hierarchy
   Infrastructure/   AliExpress Open Platform HTTP, signing, request, and parsing code
+  OpenPlatform/     Public diagnostic helpers for signing, parsing, and request inspection
 ```
 
 ## Development
-
-Restore, build, test, and pack locally:
 
 ```bash
 dotnet restore
@@ -326,11 +348,9 @@ dotnet test
 dotnet pack src/AliExpress.Affiliate/AliExpress.Affiliate.csproj -c Release -o artifacts
 ```
 
-The repository includes a GitHub Actions workflow that builds, tests, packs, and uploads the generated NuGet package as a workflow artifact.
-
 ## Official API Smoke Tests
 
-The test project includes opt-in integration tests that call the official AliExpress API. They are skipped unless credentials and test products are configured through environment variables:
+Integration tests are skipped unless credentials and test products are configured:
 
 ```bash
 ALIEXPRESS_AFFILIATE_APP_KEY=<your-app-key>
@@ -340,15 +360,11 @@ ALIEXPRESS_AFFILIATE_TEST_PRODUCT_ID_OR_URL=<product-id-or-url>
 ALIEXPRESS_AFFILIATE_TEST_PRODUCT_URL=<affiliate-enabled-product-url>
 ```
 
-Run only the official API tests with:
+Run them with:
 
 ```bash
 dotnet test --filter Category=Integration
 ```
-
-## Contributing
-
-Issues and pull requests are welcome. Please keep changes focused, add or update tests when behavior changes, and run `dotnet test` before opening a pull request.
 
 ## License
 
