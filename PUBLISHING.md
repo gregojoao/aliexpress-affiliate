@@ -54,7 +54,10 @@ dotnet add <consumer-project>.csproj package AliExpress.Affiliate --version <ver
 
 ## 5. Publish To NuGet With GitHub Actions
 
-The CI workflow publishes automatically when a Git tag starting with `v` is pushed.
+There are two GitHub Actions publishing paths:
+
+- `CI` publishes automatically when a Git tag starting with `v` is pushed.
+- `Publish NuGet` can be run manually from the Actions tab.
 
 For the first release:
 
@@ -78,6 +81,15 @@ git push origin v0.1.0
 ```
 
 GitHub Actions will restore, build, test, pack, upload the package artifact, and publish both `.nupkg` and `.snupkg` files to NuGet.
+
+To publish manually instead:
+
+1. Open the repository on GitHub.
+2. Go to **Actions**.
+3. Select **Publish NuGet**.
+4. Click **Run workflow**.
+5. Choose the `main` branch.
+6. Click **Run workflow** again.
 
 ## 6. Publish To NuGet Manually
 
