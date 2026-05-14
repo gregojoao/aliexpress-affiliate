@@ -1,4 +1,4 @@
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.Configuration;
 
 public static class AliExpressAffiliateEnvironment
 {
@@ -7,7 +7,7 @@ public static class AliExpressAffiliateEnvironment
     {
         return new AliExpressAffiliateOptions
         {
-            Endpoint = FirstNonEmpty(
+            ApiEndpoint = FirstNonEmpty(
                 GetValue(values, "ALIEXPRESS_AFFILIATE_API_ENDPOINT"),
                 GetValue(values, "ALIEXPRESS_ENDPOINT"),
                 AliExpressAffiliateOptions.DefaultEndpoint),
@@ -19,7 +19,7 @@ public static class AliExpressAffiliateEnvironment
                 GetValue(values, "ALIEXPRESS_AFFILIATE_APP_SECRET"),
                 GetValue(values, "ALIEXPRESS_OPEN_API_APP_SECRET"),
                 GetValue(values, "ALIEXPRESS_APP_SECRET")),
-            TrackingId = FirstNonEmpty(
+            DefaultTrackingId = FirstNonEmpty(
                 GetValue(values, "ALIEXPRESS_TRACKING_ID"),
                 GetValue(values, "ALIEXPRESS_AFFILIATE_TRACKING_ID")),
             AppSignature = GetValue(values, "ALIEXPRESS_APP_SIGNATURE"),
@@ -27,14 +27,12 @@ public static class AliExpressAffiliateEnvironment
                 GetValue(values, "ALIEXPRESS_AFFILIATE_API_SIGN_METHOD"),
                 GetValue(values, "ALIEXPRESS_SIGN_METHOD"),
                 AliExpressAffiliateOptions.DefaultSignMethod),
-            PromotionLinkType = FirstNonEmpty(
+            DefaultPromotionLinkType = FirstNonEmpty(
                 GetValue(values, "ALIEXPRESS_PROMOTION_LINK_TYPE"),
-                AliExpressAffiliateOptions.DefaultPromotionLinkType),
-            ShipToCountry = GetValue(values, "ALIEXPRESS_SHIP_TO_COUNTRY"),
-            TargetCurrency = GetValue(values, "ALIEXPRESS_TARGET_CURRENCY"),
-            TargetLanguage = GetValue(values, "ALIEXPRESS_TARGET_LANGUAGE"),
-            IncludeProductDetails = GetBoolean(values, "ALIEXPRESS_AFFILIATE_PRODUCT_DETAIL_ENABLED") ||
-                                    GetBoolean(values, "ALIEXPRESS_PRODUCT_DETAIL_ENABLED"),
+                AliExpressAffiliateOptions.FallbackPromotionLinkType),
+            DefaultShipToCountry = GetValue(values, "ALIEXPRESS_SHIP_TO_COUNTRY"),
+            DefaultTargetCurrency = GetValue(values, "ALIEXPRESS_TARGET_CURRENCY"),
+            DefaultTargetLanguage = GetValue(values, "ALIEXPRESS_TARGET_LANGUAGE"),
             TimeoutMilliseconds = GetPositiveInt(
                 values,
                 "ALIEXPRESS_AFFILIATE_API_TIMEOUT_MS",

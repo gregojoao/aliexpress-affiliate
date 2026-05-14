@@ -1,4 +1,4 @@
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.OpenPlatform;
 
 public sealed record AliExpressOpenPlatformRequest(
     Uri RequestUri,

@@ -1,3 +1,4 @@
+using AliExpress.Affiliate.Configuration;
 using System.Security.Cryptography;
 using System.Text;
 

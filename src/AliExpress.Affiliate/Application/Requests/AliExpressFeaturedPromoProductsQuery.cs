@@ -1,10 +1,10 @@
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.Application.Requests;
 
 public sealed record AliExpressFeaturedPromoProductsQuery
 {
     public string CategoryId { get; init; } = string.Empty;
     public string Fields { get; init; } = string.Empty;
-    public int PageNo { get; init; } = 1;
+    public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 50;
     public string PromotionName { get; init; } = string.Empty;
     public string PromotionStartTime { get; init; } = string.Empty;
@@ -13,5 +13,5 @@ public sealed record AliExpressFeaturedPromoProductsQuery
     public string TargetCurrency { get; init; } = string.Empty;
     public string TargetLanguage { get; init; } = string.Empty;
     public string TrackingId { get; init; } = string.Empty;
-    public string Country { get; init; } = string.Empty;
+    public string CountryCode { get; init; } = string.Empty;
 }

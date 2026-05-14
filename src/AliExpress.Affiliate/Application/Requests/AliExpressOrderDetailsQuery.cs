@@ -1,7 +1,7 @@
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.Application.Requests;
 
 public sealed record AliExpressOrderDetailsQuery
 {
-    public string OrderIds { get; init; } = string.Empty;
+    public IReadOnlyList<string> OrderIds { get; init; } = Array.Empty<string>();
     public string Fields { get; init; } = string.Empty;
 }

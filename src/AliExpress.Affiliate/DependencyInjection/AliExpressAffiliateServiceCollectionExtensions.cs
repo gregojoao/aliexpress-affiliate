@@ -1,11 +1,13 @@
+using AliExpress.Affiliate.Clients;
+using AliExpress.Affiliate.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.DependencyInjection;
 
 /// <summary>
-/// Dependency injection helpers for registering <see cref="AliExpressAffiliateClient"/>.
+/// Dependency injection helpers for registering <see cref="IAliExpressAffiliateClient"/>.
 /// </summary>
 public static class AliExpressAffiliateServiceCollectionExtensions
 {
@@ -62,7 +64,7 @@ public static class AliExpressAffiliateServiceCollectionExtensions
     {
         services.AddOptions<AliExpressAffiliateOptions>();
         services.AddHttpClient(nameof(AliExpressAffiliateClient));
-        services.AddTransient(sp =>
+        services.AddTransient<AliExpressAffiliateClient>(sp =>
         {
             var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
             var options = sp.GetRequiredService<IOptions<AliExpressAffiliateOptions>>();
@@ -71,5 +73,7 @@ public static class AliExpressAffiliateServiceCollectionExtensions
                 httpClientFactory.CreateClient(nameof(AliExpressAffiliateClient)),
                 options);
         });
+        services.AddTransient<IAliExpressAffiliateClient>(sp =>
+            sp.GetRequiredService<AliExpressAffiliateClient>());
     }
 }

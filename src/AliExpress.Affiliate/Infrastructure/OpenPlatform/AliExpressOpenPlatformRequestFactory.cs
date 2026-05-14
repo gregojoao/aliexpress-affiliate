@@ -1,3 +1,6 @@
+using AliExpress.Affiliate.Application.Requests;
+using AliExpress.Affiliate.Configuration;
+using AliExpress.Affiliate.OpenPlatform;
 using System.Globalization;
 
 namespace AliExpress.Affiliate.Infrastructure.OpenPlatform;
@@ -11,17 +14,19 @@ internal static class AliExpressOpenPlatformRequestFactory
 
     public static AliExpressOpenPlatformRequest BuildLinkGenerateRequest(
         string productUrl,
+        AliExpressAffiliateLinkRequest request,
         AliExpressAffiliateOptions options,
         DateTimeOffset timestamp)
     {
         options.Validate();
 
         var allParameters = BuildCommonParameters(LinkGenerateMethod, options, timestamp);
-        allParameters["promotion_link_type"] = FirstNonEmpty(
-            options.PromotionLinkType,
-            AliExpressAffiliateOptions.DefaultPromotionLinkType);
+        allParameters["promotion_link_type"] = OpenPlatformText.FirstNonEmpty(
+            request.PromotionLinkType,
+            options.DefaultPromotionLinkType,
+            AliExpressAffiliateOptions.FallbackPromotionLinkType);
         allParameters["source_values"] = productUrl;
-        allParameters["tracking_id"] = options.TrackingId;
+        allParameters["tracking_id"] = OpenPlatformText.FirstNonEmpty(request.TrackingId, options.DefaultTrackingId);
 
         AddIfNotEmpty(allParameters, "app_signature", options.AppSignature);
 
@@ -31,7 +36,7 @@ internal static class AliExpressOpenPlatformRequestFactory
             allParameters["sign_method"]);
 
         return new AliExpressOpenPlatformRequest(
-            BuildEndpointUri(options.Endpoint),
+            BuildEndpointUri(options.ApiEndpoint),
             allParameters,
             allParameters);
     }
@@ -50,12 +55,12 @@ internal static class AliExpressOpenPlatformRequestFactory
 
         var allParameters = BuildCommonParameters(ProductDetailMethod, options, timestamp);
         allParameters["product_ids"] = productId.Trim();
-        allParameters["tracking_id"] = options.TrackingId;
+        allParameters["tracking_id"] = options.DefaultTrackingId;
 
-        AddIfNotEmpty(allParameters, "target_currency", options.TargetCurrency);
-        AddIfNotEmpty(allParameters, "target_language", options.TargetLanguage);
-        AddIfNotEmpty(allParameters, "ship_to_country", options.ShipToCountry);
-        AddIfNotEmpty(allParameters, "country", options.ShipToCountry);
+        AddIfNotEmpty(allParameters, "target_currency", options.DefaultTargetCurrency);
+        AddIfNotEmpty(allParameters, "target_language", options.DefaultTargetLanguage);
+        AddIfNotEmpty(allParameters, "ship_to_country", options.DefaultShipToCountry);
+        AddIfNotEmpty(allParameters, "country", options.DefaultShipToCountry);
         AddIfNotEmpty(allParameters, "app_signature", options.AppSignature);
 
         allParameters["sign"] = AliExpressOpenPlatformSigner.CreateTopSignature(
@@ -64,7 +69,7 @@ internal static class AliExpressOpenPlatformRequestFactory
             allParameters["sign_method"]);
 
         return new AliExpressOpenPlatformRequest(
-            BuildEndpointUri(options.Endpoint),
+            BuildEndpointUri(options.ApiEndpoint),
             allParameters,
             allParameters);
     }
@@ -100,7 +105,7 @@ internal static class AliExpressOpenPlatformRequestFactory
             allParameters["sign_method"]);
 
         return new AliExpressOpenPlatformRequest(
-            BuildEndpointUri(options.Endpoint),
+            BuildEndpointUri(options.ApiEndpoint),
             allParameters,
             allParameters);
     }
@@ -144,8 +149,4 @@ internal static class AliExpressOpenPlatformRequestFactory
         }
     }
 
-    private static string FirstNonEmpty(params string[] values)
-    {
-        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
-    }
 }

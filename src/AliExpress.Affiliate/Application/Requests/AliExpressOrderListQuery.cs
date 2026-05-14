@@ -1,12 +1,12 @@
-namespace AliExpress.Affiliate;
+namespace AliExpress.Affiliate.Application.Requests;
 
 public sealed record AliExpressOrderListQuery
 {
-    public string StartTime { get; init; } = string.Empty;
-    public string EndTime { get; init; } = string.Empty;
+    public DateTimeOffset? StartTime { get; init; }
+    public DateTimeOffset? EndTime { get; init; }
     public string Status { get; init; } = string.Empty;
-    public string LocaleSite { get; init; } = string.Empty;
-    public int PageNo { get; init; } = 1;
+    public string Locale { get; init; } = string.Empty;
+    public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 50;
     public string Fields { get; init; } = string.Empty;
 }
