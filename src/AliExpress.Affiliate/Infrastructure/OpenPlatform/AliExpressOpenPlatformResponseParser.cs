@@ -90,6 +90,108 @@ internal static class AliExpressOpenPlatformResponseParser
             PromotionLink: GetPropertyString(product, "promotion_link"));
     }
 
+    public static IReadOnlyList<AliExpressAffiliateLink> ExtractAffiliateLinks(string responseBody)
+    {
+        using var document = JsonDocument.Parse(responseBody);
+        var result = ExtractResult(document.RootElement);
+
+        if (!TryGetProperty(result, "promotion_links", out var promotionLinks))
+        {
+            return Array.Empty<AliExpressAffiliateLink>();
+        }
+
+        return EnumerateItems(promotionLinks, "promotion_link").Select(item =>
+            new AliExpressAffiliateLink(
+                SourceValue: GetPropertyString(item, "source_value"),
+                PromotionLink: FirstNonEmpty(
+                    GetPropertyString(item, "promotion_link"),
+                    GetPropertyString(item, "short_url")),
+                RawJson: item.GetRawText())).ToArray();
+    }
+
+    public static AliExpressAffiliateApiResult<AliExpressAffiliateProduct> ExtractProducts(string responseBody)
+    {
+        using var document = JsonDocument.Parse(responseBody);
+        var result = ExtractResult(document.RootElement);
+
+        var products = TryGetProperty(result, "products", out var productsElement)
+            ? EnumerateItems(productsElement, "product")
+                .Select(CreateProduct)
+                .ToArray()
+            : Array.Empty<AliExpressAffiliateProduct>();
+
+        return CreateResult(responseBody, result, products);
+    }
+
+    public static AliExpressAffiliateApiResult<AliExpressAffiliateCategory> ExtractCategories(string responseBody)
+    {
+        using var document = JsonDocument.Parse(responseBody);
+        var result = ExtractResult(document.RootElement);
+
+        var categories = TryGetProperty(result, "categories", out var categoriesElement)
+            ? EnumerateItems(categoriesElement, "category")
+                .Select(category => new AliExpressAffiliateCategory(
+                    CategoryId: GetPropertyString(category, "category_id"),
+                    CategoryName: GetPropertyString(category, "category_name"),
+                    ParentCategoryId: GetPropertyString(category, "parent_category_id"),
+                    RawJson: category.GetRawText()))
+                .ToArray()
+            : Array.Empty<AliExpressAffiliateCategory>();
+
+        return CreateResult(responseBody, result, categories);
+    }
+
+    public static AliExpressAffiliateApiResult<AliExpressAffiliateFeaturedPromo> ExtractFeaturedPromos(string responseBody)
+    {
+        using var document = JsonDocument.Parse(responseBody);
+        var result = ExtractResult(document.RootElement);
+
+        var promos = TryGetProperty(result, "promos", out var promosElement)
+            ? EnumerateItems(promosElement, "promo")
+                .Select(promo => new AliExpressAffiliateFeaturedPromo(
+                    PromoName: GetPropertyString(promo, "promo_name"),
+                    PromoDescription: GetPropertyString(promo, "promo_desc"),
+                    ProductCount: GetPropertyString(promo, "product_num"),
+                    RawJson: promo.GetRawText()))
+                .ToArray()
+            : Array.Empty<AliExpressAffiliateFeaturedPromo>();
+
+        return CreateResult(responseBody, result, promos);
+    }
+
+    public static AliExpressAffiliateApiResult<AliExpressAffiliateOrder> ExtractOrders(string responseBody)
+    {
+        using var document = JsonDocument.Parse(responseBody);
+        var result = ExtractResult(document.RootElement);
+
+        var orders = TryGetProperty(result, "orders", out var ordersElement)
+            ? EnumerateItems(ordersElement, "order")
+                .Select(order => new AliExpressAffiliateOrder(
+                    OrderId: GetPropertyString(order, "order_id"),
+                    SubOrderId: GetPropertyString(order, "sub_order_id"),
+                    OrderNumber: GetPropertyString(order, "order_number"),
+                    OrderStatus: GetPropertyString(order, "order_status"),
+                    TrackingId: GetPropertyString(order, "tracking_id"),
+                    ProductId: GetPropertyString(order, "product_id"),
+                    ProductTitle: GetPropertyString(order, "product_title"),
+                    ProductDetailUrl: GetPropertyString(order, "product_detail_url"),
+                    CommissionRate: GetPropertyString(order, "commission_rate"),
+                    EstimatedCommission: FirstNonEmpty(
+                        GetPropertyString(order, "estimated_commission"),
+                        GetPropertyString(order, "estimated_finished_commission"),
+                        GetPropertyString(order, "estimated_paid_commission")),
+                    PaidCommission: FirstNonEmpty(
+                        GetPropertyString(order, "paid_commission"),
+                        GetPropertyString(order, "finished_commission")),
+                    CreatedTime: GetPropertyString(order, "created_time"),
+                    FinishedTime: GetPropertyString(order, "finished_time"),
+                    RawJson: order.GetRawText()))
+                .ToArray()
+            : Array.Empty<AliExpressAffiliateOrder>();
+
+        return CreateResult(responseBody, result, orders);
+    }
+
     public static string SummarizeLinkGenerateResponse(string responseBody)
     {
         try
@@ -129,6 +231,133 @@ internal static class AliExpressOpenPlatformResponseParser
         {
             return "API response was not valid JSON; promotion_link=missing";
         }
+    }
+
+    private static JsonElement ExtractResult(JsonElement root)
+    {
+        ThrowIfTopError(root);
+
+        var response = root;
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in root.EnumerateObject())
+            {
+                if (property.Name.EndsWith("_response", StringComparison.OrdinalIgnoreCase) &&
+                    !property.Name.Equals("error_response", StringComparison.OrdinalIgnoreCase))
+                {
+                    response = property.Value;
+                    break;
+                }
+            }
+        }
+
+        var responseResult = TryGetProperty(response, "resp_result", out var responseResultElement)
+            ? responseResultElement
+            : response;
+
+        ThrowIfBusinessError(responseResult);
+
+        return TryGetProperty(responseResult, "result", out var resultElement)
+            ? resultElement
+            : responseResult;
+    }
+
+    private static AliExpressAffiliateApiResult<T> CreateResult<T>(
+        string responseBody,
+        JsonElement result,
+        IReadOnlyList<T> items)
+    {
+        return new AliExpressAffiliateApiResult<T>(
+            Items: items,
+            CurrentPageNo: GetPropertyInt(result, "current_page_no"),
+            CurrentRecordCount: GetPropertyInt(result, "current_record_count"),
+            TotalPageNo: GetPropertyInt(result, "total_page_no"),
+            TotalRecordCount: FirstNonZero(
+                GetPropertyInt(result, "total_record_count"),
+                GetPropertyInt(result, "total_result_count")),
+            IsFinished: GetPropertyBool(result, "is_finished"),
+            RawJson: responseBody);
+    }
+
+    private static AliExpressAffiliateProduct CreateProduct(JsonElement product)
+    {
+        var currency = FirstNonEmpty(
+            GetPropertyString(product, "target_sale_price_currency"),
+            GetPropertyString(product, "target_app_sale_price_currency"),
+            GetPropertyString(product, "sale_price_currency"),
+            GetPropertyString(product, "app_sale_price_currency"),
+            GetPropertyString(product, "target_original_price_currency"),
+            GetPropertyString(product, "original_price_currency"));
+        var salePrice = FirstNonEmpty(
+            GetPropertyString(product, "target_sale_price"),
+            GetPropertyString(product, "target_app_sale_price"),
+            GetPropertyString(product, "sale_price"),
+            GetPropertyString(product, "app_sale_price"));
+        var originalPrice = FirstNonEmpty(
+            GetPropertyString(product, "target_original_price"),
+            GetPropertyString(product, "original_price"));
+
+        return new AliExpressAffiliateProduct(
+            ProductId: GetPropertyString(product, "product_id"),
+            ProductTitle: GetPropertyString(product, "product_title"),
+            ProductUrl: GetPropertyString(product, "product_detail_url"),
+            PromotionLink: GetPropertyString(product, "promotion_link"),
+            ProductImageUrl: GetPropertyString(product, "product_main_image_url"),
+            ProductPrice: ProductPriceFormatter.FormatMoney(salePrice, currency),
+            ProductOriginalPrice: ProductPriceFormatter.FormatMoney(originalPrice, currency),
+            SalePrice: salePrice,
+            OriginalPrice: originalPrice,
+            Currency: currency,
+            CommissionRate: GetPropertyString(product, "commission_rate"),
+            HotProductCommissionRate: GetPropertyString(product, "hot_product_commission_rate"),
+            Discount: GetPropertyString(product, "discount"),
+            EvaluateRate: GetPropertyString(product, "evaluate_rate"),
+            LatestVolume: FirstNonEmpty(
+                GetPropertyString(product, "lastest_volume"),
+                GetPropertyString(product, "latest_volume")),
+            FirstLevelCategoryId: GetPropertyString(product, "first_level_category_id"),
+            FirstLevelCategoryName: GetPropertyString(product, "first_level_category_name"),
+            SecondLevelCategoryId: GetPropertyString(product, "second_level_category_id"),
+            SecondLevelCategoryName: GetPropertyString(product, "second_level_category_name"),
+            ShopId: GetPropertyString(product, "shop_id"),
+            ShopUrl: GetPropertyString(product, "shop_url"),
+            PlatformProductType: GetPropertyString(product, "platform_product_type"),
+            RawJson: product.GetRawText());
+    }
+
+    private static IEnumerable<JsonElement> EnumerateItems(
+        JsonElement element,
+        string itemPropertyName)
+    {
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Object)
+                {
+                    yield return item;
+                }
+            }
+
+            yield break;
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            yield break;
+        }
+
+        if (TryGetProperty(element, itemPropertyName, out var items))
+        {
+            foreach (var item in EnumerateItems(items, itemPropertyName))
+            {
+                yield return item;
+            }
+
+            yield break;
+        }
+
+        yield return element;
     }
 
     private static string ExtractFirstSourceValue(JsonElement element)
@@ -378,6 +607,40 @@ internal static class AliExpressOpenPlatformResponseParser
         return TryGetProperty(element, propertyName, out var propertyValue)
             ? GetScalarString(propertyValue)
             : string.Empty;
+    }
+
+    private static int GetPropertyInt(
+        JsonElement element,
+        string propertyName)
+    {
+        var value = GetPropertyString(element, propertyName);
+
+        return int.TryParse(value, out var parsed)
+            ? parsed
+            : 0;
+    }
+
+    private static bool GetPropertyBool(
+        JsonElement element,
+        string propertyName)
+    {
+        if (!TryGetProperty(element, propertyName, out var propertyValue))
+        {
+            return false;
+        }
+
+        return propertyValue.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String => propertyValue.GetString()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true,
+            _ => false
+        };
+    }
+
+    private static int FirstNonZero(params int[] values)
+    {
+        return values.FirstOrDefault(value => value != 0);
     }
 
     private static string GetScalarString(JsonElement element)

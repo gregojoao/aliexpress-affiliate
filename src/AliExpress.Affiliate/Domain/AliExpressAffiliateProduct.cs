@@ -1,0 +1,26 @@
+namespace AliExpress.Affiliate;
+
+public sealed record AliExpressAffiliateProduct(
+    string ProductId,
+    string ProductTitle,
+    string ProductUrl,
+    string PromotionLink,
+    string ProductImageUrl,
+    string ProductPrice,
+    string ProductOriginalPrice,
+    string SalePrice,
+    string OriginalPrice,
+    string Currency,
+    string CommissionRate,
+    string HotProductCommissionRate,
+    string Discount,
+    string EvaluateRate,
+    string LatestVolume,
+    string FirstLevelCategoryId,
+    string FirstLevelCategoryName,
+    string SecondLevelCategoryId,
+    string SecondLevelCategoryName,
+    string ShopId,
+    string ShopUrl,
+    string PlatformProductType,
+    string RawJson);

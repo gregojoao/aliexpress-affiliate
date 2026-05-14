@@ -70,6 +70,32 @@ public class AliExpressAffiliateClientTests
     }
 
     [Fact]
+    public void BuildApiRequest_ShouldSignGenericAffiliateMethods()
+    {
+        var request = AliExpressAffiliateClient.BuildApiRequest(
+            "aliexpress.affiliate.product.query",
+            CreateOptions(),
+            DateTimeOffset.FromUnixTimeMilliseconds(1778688000000),
+            new Dictionary<string, string>
+            {
+                ["keywords"] = "microfone",
+                ["page_no"] = "2",
+                ["page_size"] = "20",
+                ["target_currency"] = "BRL",
+                ["target_language"] = "PT",
+                ["ship_to_country"] = "BR",
+                ["tracking_id"] = "telegram_greco"
+            });
+
+        request.BodyParameters.Should().Contain("method", "aliexpress.affiliate.product.query");
+        request.BodyParameters.Should().Contain("keywords", "microfone");
+        request.BodyParameters.Should().Contain("page_no", "2");
+        request.BodyParameters.Should().Contain("page_size", "20");
+        request.BodyParameters.Should().Contain("target_currency", "BRL");
+        request.BodyParameters.Should().ContainKey("sign");
+    }
+
+    [Fact]
     public async Task GenerateAffiliateLinkAsync_ShouldReadPromotionLinkAndMergeProductDetails()
     {
         var handler = new QueueingHandler(
@@ -131,6 +157,272 @@ public class AliExpressAffiliateClientTests
         handler.Requests[0].RequestBody.Should().NotContain("promotion_link_type=2");
         handler.Requests[1].RequestBody.Should().Contain("method=aliexpress.affiliate.productdetail.get");
         handler.Requests[1].RequestBody.Should().Contain("product_ids=1005006356702381");
+    }
+
+    [Fact]
+    public async Task GenerateAffiliateLinksAsync_ShouldGenerateLinksInBatch()
+    {
+        var handler = new QueueingHandler("""
+        {
+          "resp_result": {
+            "result": {
+              "promotion_links": {
+                "promotion_link": [
+                  {
+                    "source_value": "https://pt.aliexpress.com/item/1005006356702381.html",
+                    "promotion_link": "https://s.click.aliexpress.com/e/_one"
+                  },
+                  {
+                    "source_value": "https://pt.aliexpress.com/item/1005006860981590.html",
+                    "promotion_link": "https://s.click.aliexpress.com/e/_two"
+                  }
+                ]
+              }
+            },
+            "resp_code": 200
+          }
+        }
+        """);
+        var client = new AliExpressAffiliateClient(
+            new HttpClient(handler),
+            () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
+
+        var result = await client.GenerateAffiliateLinksAsync(
+            new[]
+            {
+                "https://pt.aliexpress.com/item/1005006356702381.html?spm=abc",
+                "https://pt.aliexpress.com/item/1005006860981590.html"
+            },
+            CreateOptions());
+
+        result.Should().HaveCount(2);
+        result[0].PromotionLink.Should().Be("https://s.click.aliexpress.com/e/_one");
+        handler.Requests.Should().HaveCount(1);
+        handler.Requests[0].RequestBody.Should().Contain("method=aliexpress.affiliate.link.generate");
+        handler.Requests[0].RequestBody.Should().Contain("source_values=https%3A%2F%2Fpt.aliexpress.com%2Fitem%2F1005006356702381.html%2Chttps%3A%2F%2Fpt.aliexpress.com%2Fitem%2F1005006860981590.html");
+    }
+
+    [Theory]
+    [InlineData("SearchProductsAsync", "aliexpress.affiliate.product.query")]
+    [InlineData("GetHotProductsAsync", "aliexpress.affiliate.hotproduct.query")]
+    public async Task ProductQueries_ShouldSendExpectedMethodAndParseProducts(
+        string operation,
+        string expectedMethod)
+    {
+        var handler = new QueueingHandler(ProductPageJson);
+        var client = new AliExpressAffiliateClient(
+            new HttpClient(handler),
+            () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
+        var query = new AliExpressProductQuery
+        {
+            Keywords = "microfone",
+            PageNo = 2,
+            PageSize = 20,
+            Sort = "SALE_PRICE_ASC"
+        };
+
+        var result = operation == "SearchProductsAsync"
+            ? await client.SearchProductsAsync(query, CreateOptions())
+            : await client.GetHotProductsAsync(query, CreateOptions());
+
+        result.CurrentPageNo.Should().Be(2);
+        result.TotalRecordCount.Should().Be(123);
+        result.Items.Should().HaveCount(1);
+        result.Items[0].ProductId.Should().Be("1005006356702381");
+        result.Items[0].ProductPrice.Should().Be("R$ 264,51");
+        handler.Requests[0].RequestBody.Should().Contain($"method={expectedMethod}");
+        handler.Requests[0].RequestBody.Should().Contain("keywords=microfone");
+        handler.Requests[0].RequestBody.Should().Contain("page_no=2");
+        handler.Requests[0].RequestBody.Should().Contain("page_size=20");
+        handler.Requests[0].RequestBody.Should().Contain("target_currency=BRL");
+        handler.Requests[0].RequestBody.Should().Contain("tracking_id=telegram_greco");
+    }
+
+    [Fact]
+    public async Task GetHotProductDownloadAsync_ShouldSendDownloadParameters()
+    {
+        var handler = new QueueingHandler(ProductPageJson);
+        var client = new AliExpressAffiliateClient(
+            new HttpClient(handler),
+            () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
+
+        var result = await client.GetHotProductDownloadAsync(
+            new AliExpressHotProductDownloadQuery
+            {
+                CategoryId = "111",
+                LocaleSite = "global",
+                PageNo = 1,
+                PageSize = 10
+            },
+            CreateOptions());
+
+        result.Items.Should().ContainSingle();
+        handler.Requests[0].RequestBody.Should().Contain("method=aliexpress.affiliate.hotproduct.download");
+        handler.Requests[0].RequestBody.Should().Contain("category_id=111");
+        handler.Requests[0].RequestBody.Should().Contain("locale_site=global");
+        handler.Requests[0].RequestBody.Should().Contain("country=BR");
+    }
+
+    [Fact]
+    public async Task GetCategoriesAsync_ShouldParseCategories()
+    {
+        var handler = new QueueingHandler("""
+        {
+          "aliexpress_affiliate_category_get_response": {
+            "resp_result": {
+              "resp_code": 200,
+              "result": {
+                "categories": {
+                  "category": [
+                    {
+                      "category_id": 111,
+                      "category_name": "Audio",
+                      "parent_category_id": 0
+                    }
+                  ]
+                },
+                "total_result_count": 1
+              }
+            }
+          }
+        }
+        """);
+        var client = new AliExpressAffiliateClient(
+            new HttpClient(handler),
+            () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
+
+        var result = await client.GetCategoriesAsync(CreateOptions());
+
+        result.Items.Should().ContainSingle();
+        result.Items[0].CategoryName.Should().Be("Audio");
+        result.TotalRecordCount.Should().Be(1);
+        handler.Requests[0].RequestBody.Should().Contain("method=aliexpress.affiliate.category.get");
+    }
+
+    [Fact]
+    public async Task GetFeaturedPromosAsync_ShouldParsePromos()
+    {
+        var handler = new QueueingHandler("""
+        {
+          "resp_result": {
+            "resp_code": 200,
+            "result": {
+              "current_record_count": 1,
+              "promos": {
+                "promo": [
+                  {
+                    "promo_name": "Hot Product",
+                    "promo_desc": "High commission products",
+                    "product_num": 100
+                  }
+                ]
+              }
+            }
+          }
+        }
+        """);
+        var client = new AliExpressAffiliateClient(
+            new HttpClient(handler),
+            () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
+
+        var result = await client.GetFeaturedPromosAsync(CreateOptions());
+
+        result.Items.Should().ContainSingle();
+        result.Items[0].PromoName.Should().Be("Hot Product");
+        result.CurrentRecordCount.Should().Be(1);
+        handler.Requests[0].RequestBody.Should().Contain("method=aliexpress.affiliate.featuredpromo.get");
+    }
+
+    [Fact]
+    public async Task GetFeaturedPromoProductsAsync_ShouldSendPromoParameters()
+    {
+        var handler = new QueueingHandler(ProductPageJson);
+        var client = new AliExpressAffiliateClient(
+            new HttpClient(handler),
+            () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
+
+        var result = await client.GetFeaturedPromoProductsAsync(
+            new AliExpressFeaturedPromoProductsQuery
+            {
+                PromotionName = "Hot Product",
+                Sort = "commissionDesc",
+                PageSize = 5
+            },
+            CreateOptions());
+
+        result.Items.Should().ContainSingle();
+        handler.Requests[0].RequestBody.Should().Contain("method=aliexpress.affiliate.featuredpromo.products.get");
+        handler.Requests[0].RequestBody.Should().Contain("promotion_name=Hot+Product");
+        handler.Requests[0].RequestBody.Should().Contain("sort=commissionDesc");
+    }
+
+    [Fact]
+    public async Task GetSmartMatchProductsAsync_ShouldRequireDeviceIdAndSendParameters()
+    {
+        var handler = new QueueingHandler(ProductPageJson);
+        var client = new AliExpressAffiliateClient(
+            new HttpClient(handler),
+            () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
+
+        var result = await client.GetSmartMatchProductsAsync(
+            new AliExpressSmartMatchQuery
+            {
+                DeviceId = "device-123",
+                Keywords = "microfone",
+                PageNo = 1
+            },
+            CreateOptions());
+
+        result.Items.Should().ContainSingle();
+        handler.Requests[0].RequestBody.Should().Contain("method=aliexpress.affiliate.product.smartmatch");
+        handler.Requests[0].RequestBody.Should().Contain("device_id=device-123");
+        handler.Requests[0].RequestBody.Should().Contain("keywords=microfone");
+
+        Func<Task> act = async () => await client.GetSmartMatchProductsAsync(new AliExpressSmartMatchQuery(), CreateOptions());
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task OrderMethods_ShouldSendExpectedParametersAndParseOrders()
+    {
+        var handler = new QueueingHandler(OrderPageJson, OrderPageJson, OrderPageJson);
+        var client = new AliExpressAffiliateClient(
+            new HttpClient(handler),
+            () => DateTimeOffset.FromUnixTimeMilliseconds(1778688000000));
+
+        var orders = await client.GetOrdersAsync(
+            new AliExpressOrderListQuery
+            {
+                StartTime = "2026-05-01 00:00:00",
+                EndTime = "2026-05-02 00:00:00",
+                Status = "Payment Completed",
+                PageNo = 1,
+                PageSize = 20
+            },
+            CreateOptions());
+        var details = await client.GetOrderDetailsAsync(
+            new AliExpressOrderDetailsQuery { OrderIds = "222222" },
+            CreateOptions());
+        var byIndex = await client.GetOrdersByIndexAsync(
+            new AliExpressOrderListByIndexQuery
+            {
+                StartTime = "2026-05-01 00:00:00",
+                EndTime = "2026-05-02 00:00:00",
+                Status = "Payment Completed",
+                TimeType = "Payment Completed Time",
+                StartQueryIndexId = "1000"
+            },
+            CreateOptions());
+
+        orders.Items[0].SubOrderId.Should().Be("222222");
+        details.Items[0].OrderStatus.Should().Be("Payment Completed");
+        byIndex.Items[0].TrackingId.Should().Be("telegram_greco");
+        handler.Requests[0].RequestBody.Should().Contain("method=aliexpress.affiliate.order.list");
+        handler.Requests[0].RequestBody.Should().Contain("status=Payment+Completed");
+        handler.Requests[1].RequestBody.Should().Contain("method=aliexpress.affiliate.order.get");
+        handler.Requests[1].RequestBody.Should().Contain("order_ids=222222");
+        handler.Requests[2].RequestBody.Should().Contain("method=aliexpress.affiliate.order.listbyindex");
+        handler.Requests[2].RequestBody.Should().Contain("start_query_index_id=1000");
     }
 
     [Fact]
@@ -228,6 +520,77 @@ public class AliExpressAffiliateClientTests
             IncludeProductDetails = includeProductDetails
         };
     }
+
+    private const string ProductPageJson = """
+    {
+      "resp_result": {
+        "resp_code": 200,
+        "result": {
+          "current_page_no": 2,
+          "current_record_count": 1,
+          "total_page_no": 10,
+          "total_record_count": 123,
+          "products": {
+            "product": [
+              {
+                "product_id": 1005006356702381,
+                "product_title": "Fifine microfone dinamico usb/xlr",
+                "target_sale_price": "264.51",
+                "target_sale_price_currency": "BRL",
+                "target_original_price": "499.05",
+                "target_original_price_currency": "BRL",
+                "product_main_image_url": "https://ae-pic-a1.aliexpress-media.com/kf/product.jpg",
+                "product_detail_url": "https://pt.aliexpress.com/item/1005006356702381.html",
+                "promotion_link": "https://s.click.aliexpress.com/e/_product",
+                "commission_rate": "3.5%",
+                "hot_product_commission_rate": "60%",
+                "discount": "47%",
+                "evaluate_rate": "96%",
+                "lastest_volume": 300,
+                "first_level_category_id": 44,
+                "first_level_category_name": "Consumer Electronics",
+                "second_level_category_id": 55,
+                "second_level_category_name": "Microphones",
+                "shop_id": 123,
+                "shop_url": "https://www.aliexpress.com/store/123",
+                "platform_product_type": "ALL"
+              }
+            ]
+          }
+        }
+      }
+    }
+    """;
+
+    private const string OrderPageJson = """
+    {
+      "resp_result": {
+        "resp_code": 200,
+        "result": {
+          "current_page_no": 1,
+          "current_record_count": 1,
+          "orders": {
+            "order": [
+              {
+                "order_id": 3333333,
+                "sub_order_id": 222222,
+                "order_number": 222222,
+                "order_status": "Payment Completed",
+                "tracking_id": "telegram_greco",
+                "product_id": 1005006356702381,
+                "product_title": "Fifine microfone dinamico usb/xlr",
+                "product_detail_url": "https://pt.aliexpress.com/item/1005006356702381.html",
+                "commission_rate": "3.5%",
+                "estimated_commission": "1.20",
+                "paid_commission": "0.00",
+                "created_time": "2026-05-01 10:00:00"
+              }
+            ]
+          }
+        }
+      }
+    }
+    """;
 
     private sealed class QueueingHandler : HttpMessageHandler
     {

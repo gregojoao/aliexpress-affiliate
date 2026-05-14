@@ -59,6 +59,67 @@ public class AliExpressAffiliateOfficialApiTests
         result.SourceUrl.Should().Contain(".html");
     }
 
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task ProductDiscoveryMethods_WithOfficialApi_ShouldReturnWithoutApiErrors()
+    {
+        if (!TryCreateOfficialOptions(out var options))
+        {
+            return;
+        }
+
+        using var httpClient = new HttpClient();
+        var client = new AliExpressAffiliateClient(httpClient);
+
+        var categories = await client.GetCategoriesAsync(options);
+        var products = await client.SearchProductsAsync(
+            new AliExpressProductQuery
+            {
+                Keywords = "microfone",
+                PageNo = 1,
+                PageSize = 5
+            },
+            options);
+        var hotProducts = await client.GetHotProductsAsync(
+            new AliExpressProductQuery
+            {
+                Keywords = "fone bluetooth",
+                PageNo = 1,
+                PageSize = 5
+            },
+            options);
+
+        categories.Items.Should().NotBeNull();
+        products.Items.Should().NotBeNull();
+        hotProducts.Items.Should().NotBeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task PromotionMethods_WithOfficialApi_ShouldReturnWithoutApiErrors()
+    {
+        if (!TryCreateOfficialOptions(out var options))
+        {
+            return;
+        }
+
+        using var httpClient = new HttpClient();
+        var client = new AliExpressAffiliateClient(httpClient);
+
+        var promos = await client.GetFeaturedPromosAsync(options);
+        var hotDownload = await client.GetHotProductDownloadAsync(
+            new AliExpressHotProductDownloadQuery
+            {
+                CategoryId = "7",
+                PageNo = 1,
+                PageSize = 5
+            },
+            options);
+
+        promos.Items.Should().NotBeNull();
+        hotDownload.Items.Should().NotBeNull();
+    }
+
     private bool TryCreateOfficialOptions(
         out AliExpressAffiliateOptions officialOptions,
         bool includeProductDetails = false)

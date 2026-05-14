@@ -69,6 +69,42 @@ internal static class AliExpressOpenPlatformRequestFactory
             allParameters);
     }
 
+    public static AliExpressOpenPlatformRequest BuildApiRequest(
+        string method,
+        AliExpressAffiliateOptions options,
+        DateTimeOffset timestamp,
+        IReadOnlyDictionary<string, string>? apiParameters = null)
+    {
+        options.Validate();
+
+        if (string.IsNullOrWhiteSpace(method))
+        {
+            throw new ArgumentException("API method is required.", nameof(method));
+        }
+
+        var allParameters = BuildCommonParameters(method.Trim(), options, timestamp);
+
+        if (apiParameters != null)
+        {
+            foreach (var parameter in apiParameters)
+            {
+                AddIfNotEmpty(allParameters, parameter.Key, parameter.Value);
+            }
+        }
+
+        AddIfNotEmpty(allParameters, "app_signature", options.AppSignature);
+
+        allParameters["sign"] = AliExpressOpenPlatformSigner.CreateTopSignature(
+            allParameters,
+            options.AppSecret,
+            allParameters["sign_method"]);
+
+        return new AliExpressOpenPlatformRequest(
+            BuildEndpointUri(options.Endpoint),
+            allParameters,
+            allParameters);
+    }
+
     private static SortedDictionary<string, string> BuildCommonParameters(
         string method,
         AliExpressAffiliateOptions options,

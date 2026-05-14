@@ -7,7 +7,14 @@ Minimal .NET client for the AliExpress Open Platform affiliate APIs.
 ## Features
 
 - Generate affiliate links with `aliexpress.affiliate.link.generate`
+- Generate affiliate links in batch
 - Fetch product details with `aliexpress.affiliate.productdetail.get`
+- Search products with `aliexpress.affiliate.product.query`
+- Fetch hot products and hot product downloads
+- Fetch affiliate categories
+- Fetch featured promotions and featured promotion products
+- Fetch smart match product recommendations
+- Fetch affiliate orders by page, by IDs, or by query index
 - Sign TOP-style requests with `md5`, `hmac-md5`, or `hmac-sha256`
 - Normalize AliExpress product URLs by trimming everything after `.html`
 - Parse title, current price, original price, image URL, product URL, and promotion link
@@ -80,6 +87,68 @@ Console.WriteLine(details?.ProductOriginalPrice);
 ```
 
 The method accepts either a product ID or an AliExpress product URL.
+
+## Product Discovery
+
+Search regular products:
+
+```csharp
+var products = await client.SearchProductsAsync(
+    new AliExpressProductQuery
+    {
+        Keywords = "microfone",
+        PageNo = 1,
+        PageSize = 20,
+        Sort = "SALE_PRICE_ASC"
+    },
+    options);
+```
+
+Fetch hot products:
+
+```csharp
+var hotProducts = await client.GetHotProductsAsync(
+    new AliExpressProductQuery
+    {
+        Keywords = "fone bluetooth",
+        PageSize = 20
+    },
+    options);
+```
+
+Fetch categories:
+
+```csharp
+var categories = await client.GetCategoriesAsync(options);
+```
+
+## Promotions
+
+```csharp
+var promos = await client.GetFeaturedPromosAsync(options);
+
+var promoProducts = await client.GetFeaturedPromoProductsAsync(
+    new AliExpressFeaturedPromoProductsQuery
+    {
+        PromotionName = "Hot Product",
+        PageSize = 20
+    },
+    options);
+```
+
+## Orders
+
+```csharp
+var orders = await client.GetOrdersAsync(
+    new AliExpressOrderListQuery
+    {
+        StartTime = "2026-05-01 00:00:00",
+        EndTime = "2026-05-02 00:00:00",
+        PageNo = 1,
+        PageSize = 20
+    },
+    options);
+```
 
 ## Configuration
 
