@@ -352,24 +352,6 @@ dotnet test
 dotnet pack src/AliExpress.Affiliate/AliExpress.Affiliate.csproj -c Release -o artifacts
 ```
 
-## Official API Smoke Tests
-
-Integration tests are skipped unless credentials and test products are configured:
-
-```bash
-ALIEXPRESS_AFFILIATE_APP_KEY=<your-app-key>
-ALIEXPRESS_AFFILIATE_APP_SECRET=<your-app-secret>
-ALIEXPRESS_TRACKING_ID=<your-tracking-id>
-ALIEXPRESS_AFFILIATE_TEST_PRODUCT_ID_OR_URL=<product-id-or-url>
-ALIEXPRESS_AFFILIATE_TEST_PRODUCT_URL=<affiliate-enabled-product-url>
-```
-
-Run them with:
-
-```bash
-dotnet test --filter Category=Integration
-```
-
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
