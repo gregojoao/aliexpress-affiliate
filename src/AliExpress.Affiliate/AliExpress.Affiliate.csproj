@@ -8,16 +8,21 @@
     <Version>0.1.0</Version>
     <Authors>Joao Greco</Authors>
     <Company>Joao Greco</Company>
-    <Description>Minimal .NET client for AliExpress affiliate link generation and product detail lookup.</Description>
-    <PackageTags>aliexpress;affiliate;open-platform;links;ecommerce</PackageTags>
+    <Title>AliExpress Affiliate SDK for .NET</Title>
+    <Description>.NET SDK for AliExpress Open Platform affiliate APIs, including affiliate link generation, product discovery, promotions, categories, product details, and order lookups.</Description>
+    <PackageTags>aliexpress;affiliate;open-platform;sdk;links;ecommerce;products;orders;promotions</PackageTags>
+    <PackageProjectUrl>https://github.com/gregojoao/aliexpress-affiliate</PackageProjectUrl>
+    <PackageReleaseNotes>Initial SDK release with affiliate link generation, product details, product search, hot products, categories, promotions, smart match, and order APIs.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/gregojoao/aliexpress-affiliate</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
