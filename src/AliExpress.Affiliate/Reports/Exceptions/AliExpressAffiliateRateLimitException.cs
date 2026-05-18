@@ -1,5 +1,3 @@
-using AliExpress.Affiliate.Exceptions;
-
 namespace AliExpress.Affiliate.Reports.Exceptions;
 
 /// <summary>
@@ -7,21 +5,14 @@ namespace AliExpress.Affiliate.Reports.Exceptions;
 /// (HTTP 429 or a TOP error code such as <c>isv.api-flow-limit</c> /
 /// <c>HTTP_INVOKE_LIMITED</c>).
 /// </summary>
-public sealed class AliExpressAffiliateRateLimitException : AliExpressAffiliateException
+public sealed class AliExpressAffiliateRateLimitException : AliExpressAffiliateReportsException
 {
     public AliExpressAffiliateRateLimitException(
         string message,
         string? code = null,
         string? subCode = null,
         string? requestId = null)
-        : base(message)
+        : base(message, code, subCode, requestId)
     {
-        Code = code;
-        SubCode = subCode;
-        RequestId = requestId;
     }
-
-    public string? Code { get; }
-    public string? SubCode { get; }
-    public string? RequestId { get; }
 }

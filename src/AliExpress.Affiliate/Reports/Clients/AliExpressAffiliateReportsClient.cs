@@ -16,7 +16,9 @@ namespace AliExpress.Affiliate.Reports.Clients;
 /// </summary>
 public sealed class AliExpressAffiliateReportsClient : IAliExpressAffiliateReportsClient
 {
-    private const int SummaryPageSize = 50;
+    // Pagination cap for the summary aggregator: 40 pages × 50 items = up to 2000 conversions
+    // per window. Beyond that, callers should narrow the window or paginate ListConversionsAsync
+    // themselves. Serial paging is deliberate — AliExpress TOP enforces per-app QPS limits.
     private const int SummaryMaxPages = 40;
 
     private readonly ReportsGateway _gateway;
@@ -24,19 +26,8 @@ public sealed class AliExpressAffiliateReportsClient : IAliExpressAffiliateRepor
     private readonly AliExpressAffiliateReportsOptions? _defaultOptions;
 
     /// <summary>
-    /// Primary constructor matching the link-generation client's shape.
-    /// </summary>
-    /// <param name="httpClient">Reused HttpClient. The SDK applies its own per-call timeout via cancellation.</param>
-    /// <param name="clock">Wall-clock provider used to stamp <c>timestamp</c>. Defaults to <see cref="DateTimeOffset.UtcNow"/>.</param>
-    public AliExpressAffiliateReportsClient(
-        HttpClient httpClient,
-        Func<DateTimeOffset>? clock = null)
-        : this(httpClient, defaultOptions: null, clock, logger: null)
-    {
-    }
-
-    /// <summary>
-    /// Constructor with default options (used by the DI extension).
+    /// DI-friendly constructor. <paramref name="options"/> must contain a valid app key
+    /// and app secret; validation is deferred to the first call.
     /// </summary>
     public AliExpressAffiliateReportsClient(
         HttpClient httpClient,
@@ -47,8 +38,13 @@ public sealed class AliExpressAffiliateReportsClient : IAliExpressAffiliateRepor
     }
 
     /// <summary>
-    /// Full constructor — defaults can be overridden per call, logger is optional.
+    /// Primary constructor. <paramref name="defaultOptions"/> is required — pass <c>null</c>
+    /// only when the caller plans to feed options via configuration before the first call.
     /// </summary>
+    /// <param name="httpClient">Reused HttpClient. The SDK applies its own per-call timeout via cancellation.</param>
+    /// <param name="defaultOptions">Reports options applied to every method call.</param>
+    /// <param name="clock">Wall-clock provider used to stamp <c>timestamp</c>. Defaults to <see cref="DateTimeOffset.UtcNow"/>.</param>
+    /// <param name="logger">Optional logger. Credential values are never logged.</param>
     public AliExpressAffiliateReportsClient(
         HttpClient httpClient,
         AliExpressAffiliateReportsOptions? defaultOptions,
@@ -72,7 +68,7 @@ public sealed class AliExpressAffiliateReportsClient : IAliExpressAffiliateRepor
         var options = GetOptions();
         var openPlatformRequest = ReportsRequestFactory.BuildOrderListRequest(request, options, _clock());
         var body = await _gateway.SendAsync(openPlatformRequest, options, cancellationToken).ConfigureAwait(false);
-        return ReportsResponseParser.ParseConversionPage(body, request.Page, ClampPageSize(request.PageSize));
+        return ReportsResponseParser.ParseConversionPage(body, request.Page, ReportsRequestFactory.ClampPageSize(request.PageSize));
     }
 
     /// <inheritdoc />
@@ -110,7 +106,7 @@ public sealed class AliExpressAffiliateReportsClient : IAliExpressAffiliateRepor
                     To: request.To,
                     Status: ConversionStatusFilter.All,
                     Page: page,
-                    PageSize: SummaryPageSize,
+                    PageSize: ReportsRequestFactory.MaxPageSize,
                     TrackingId: request.TrackingId),
                 cancellationToken).ConfigureAwait(false);
 
@@ -159,15 +155,5 @@ public sealed class AliExpressAffiliateReportsClient : IAliExpressAffiliateRepor
         return _defaultOptions
             ?? throw new AliExpressAffiliateValidationException(
                 "No default AliExpressAffiliateReportsOptions were configured. Register the client with AddAliExpressAffiliateReports.");
-    }
-
-    private static int ClampPageSize(int requested)
-    {
-        if (requested <= 0)
-        {
-            return 50;
-        }
-
-        return requested > 50 ? 50 : requested;
     }
 }

@@ -11,12 +11,23 @@ namespace AliExpress.Affiliate.Reports.Infrastructure;
 /// </summary>
 internal static class ReportsResponseParser
 {
-    private static readonly string[] DateFormats =
+    // AliExpress TOP returns timestamps in two shapes: naive "yyyy-MM-dd HH:mm:ss" (interpreted
+    // in GMT+8 server-side) and ISO 8601 with an explicit offset. Try offset-bearing formats
+    // first; only fall back to anchoring in GMT+8 when no offset is present.
+    private static readonly string[] OffsetDateFormats =
+    {
+        "yyyy-MM-ddTHH:mm:sszzz",
+        "yyyy-MM-ddTHH:mm:ss.fffzzz",
+        "yyyy-MM-ddTHH:mm:ssZ",
+        "yyyy-MM-ddTHH:mm:ss.fffZ"
+    };
+
+    private static readonly string[] NaiveDateFormats =
     {
         "yyyy-MM-dd HH:mm:ss",
-        "yyyy-MM-ddTHH:mm:ss",
         "yyyy-MM-dd HH:mm:ss.fff",
-        "yyyy-MM-ddTHH:mm:sszzz",
+        "yyyy-MM-ddTHH:mm:ss",
+        "yyyy-MM-ddTHH:mm:ss.fff",
         "yyyy-MM-dd"
     };
 
@@ -120,7 +131,7 @@ internal static class ReportsResponseParser
         return new AliExpressConversion(
             ConversionId: ReadFirstNonEmpty(order, "sub_order_id", "order_id", "order_number") ?? string.Empty,
             OrderId: ReadFirstNonEmpty(order, "order_id", "order_number", "sub_order_id") ?? string.Empty,
-            Status: MapStatus(OpenPlatformJsonReader.GetPropertyString(order, "order_status")),
+            Status: OrderStatusMap.FromTopStatusString(OpenPlatformJsonReader.GetPropertyString(order, "order_status")),
             ProductId: ReadFirstNonEmpty(order, "product_id", "item_id"),
             ProductTitle: ReadFirstNonEmpty(order, "product_title", "item_title"),
             ProductImageUrl: ReadFirstNonEmpty(order, "product_main_image_url", "product_image_url", "image_url"),
@@ -167,25 +178,6 @@ internal static class ReportsResponseParser
             CommissionRate: ReadPercentAsFraction(order, "commission_rate"));
     }
 
-    private static OrderStatus MapStatus(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return OrderStatus.Unknown;
-        }
-
-        var normalized = raw.Trim().ToLowerInvariant();
-        return normalized switch
-        {
-            "payment pending" or "wait payment" or "pending" => OrderStatus.Pending,
-            "payment completed" or "paid" => OrderStatus.Paid,
-            "buyer confirmed receipt" or "confirmed receipt" or "confirmed" or "settled" => OrderStatus.Confirmed,
-            "cancelled order" or "cancelled" or "canceled" => OrderStatus.Cancelled,
-            "invalid order" or "invalid" => OrderStatus.Invalid,
-            _ => OrderStatus.Unknown
-        };
-    }
-
     private static Money ReadMoney(JsonElement order, string fallbackCurrency, params string[] amountFieldNames)
     {
         foreach (var name in amountFieldNames)
@@ -217,19 +209,20 @@ internal static class ReportsResponseParser
             return asDecimal;
         }
 
-        var raw = OpenPlatformJsonReader.GetScalarString(element);
+        return ParseDecimalString(OpenPlatformJsonReader.GetScalarString(element));
+    }
+
+    private static decimal? ParseDecimalString(string? raw)
+    {
         if (string.IsNullOrWhiteSpace(raw))
         {
             return null;
         }
 
-        raw = raw.Trim().Replace("%", string.Empty, StringComparison.Ordinal);
-        if (decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
-        {
-            return parsed;
-        }
-
-        return null;
+        var trimmed = raw.Trim().Replace("%", string.Empty, StringComparison.Ordinal);
+        return decimal.TryParse(trimmed, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
     }
 
     private static decimal ReadPercentAsFraction(JsonElement order, params string[] fieldNames)
@@ -242,20 +235,14 @@ internal static class ReportsResponseParser
             }
 
             var raw = OpenPlatformJsonReader.GetScalarString(element);
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                continue;
-            }
-
-            var hasPercent = raw.Contains('%', StringComparison.Ordinal);
-            var parsed = ParseDecimal(element);
+            var parsed = ParseDecimalString(raw);
             if (parsed is null)
             {
                 continue;
             }
 
             var value = parsed.Value;
-            if (hasPercent || value > 1m)
+            if (raw.Contains('%', StringComparison.Ordinal) || value > 1m)
             {
                 value /= 100m;
             }
@@ -292,36 +279,26 @@ internal static class ReportsResponseParser
 
             if (DateTimeOffset.TryParseExact(
                     raw,
-                    DateFormats,
+                    OffsetDateFormats,
                     CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal,
-                    out var parsedExact))
+                    DateTimeStyles.None,
+                    out var withOffset))
             {
-                return InterpretTimestamp(parsedExact, raw);
+                return withOffset;
             }
 
-            if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+            if (DateTime.TryParseExact(
+                    raw,
+                    NaiveDateFormats,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var naive))
             {
-                return InterpretTimestamp(parsed, raw);
+                return new DateTimeOffset(naive, GmtPlus8Time.Offset);
             }
         }
 
         return null;
-    }
-
-    private static DateTimeOffset InterpretTimestamp(DateTimeOffset parsed, string raw)
-    {
-        // AliExpress emits timestamps in GMT+8 without a zone designator. If the raw string carries
-        // no offset, re-anchor it to GMT+8 so callers receive an unambiguous UTC instant.
-        var hasExplicitOffset = raw.Contains('+', StringComparison.Ordinal)
-            || raw.Contains('Z', StringComparison.OrdinalIgnoreCase)
-            || raw.Count(c => c == '-') > 2;
-        if (hasExplicitOffset)
-        {
-            return parsed;
-        }
-
-        return new DateTimeOffset(parsed.DateTime, GmtPlus8Time.Offset);
     }
 
     private static string? ReadFirstNonEmpty(JsonElement element, params string[] fieldNames)

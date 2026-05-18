@@ -1,5 +1,4 @@
 using AliExpress.Affiliate.OpenPlatform;
-using AliExpress.Affiliate.Reports.Application;
 using AliExpress.Affiliate.Reports.Application.Requests;
 using AliExpress.Affiliate.Reports.Configuration;
 using AliExpress.Affiliate.Reports.Infrastructure.Signing;
@@ -16,6 +15,26 @@ internal static class ReportsRequestFactory
     public const string OrderGetMethod = "aliexpress.affiliate.order.get";
     public const string JsonFormat = "json";
 
+    /// <summary>Maximum page size accepted by <c>aliexpress.affiliate.order.list</c>.</summary>
+    public const int MaxPageSize = 50;
+
+    /// <summary>Default page size applied when the caller passes a non-positive value.</summary>
+    public const int DefaultPageSize = 50;
+
+    /// <summary>
+    /// Clamps a caller-supplied page size to the range accepted by AliExpress TOP.
+    /// Non-positive values fall back to <see cref="DefaultPageSize"/>.
+    /// </summary>
+    public static int ClampPageSize(int requested)
+    {
+        if (requested <= 0)
+        {
+            return DefaultPageSize;
+        }
+
+        return requested > MaxPageSize ? MaxPageSize : requested;
+    }
+
     public static AliExpressOpenPlatformRequest BuildOrderListRequest(
         ListConversionsRequest request,
         AliExpressAffiliateReportsOptions options,
@@ -30,9 +49,8 @@ internal static class ReportsRequestFactory
         parameters["page_size"] = ClampPageSize(request.PageSize).ToString(CultureInfo.InvariantCulture);
 
         // AliExpress TOP requires `status` for aliexpress.affiliate.order.list — it has no
-        // "all statuses" wildcard. ConversionStatusFilter.All / null falls back to
-        // "Payment Completed" (paid conversions), which is the typical dashboard signal.
-        parameters["status"] = MapStatusFilter(request.Status);
+        // "all statuses" wildcard. See OrderStatusMap.ToTopStatusString for the All/null fallback.
+        parameters["status"] = OrderStatusMap.ToTopStatusString(request.Status);
 
         AddIfNotEmpty(parameters, "order_ids", request.OrderId);
         AddIfNotEmpty(parameters, "tracking_id", request.TrackingId ?? options.TrackingId);
@@ -101,16 +119,6 @@ internal static class ReportsRequestFactory
         return new AliExpressOpenPlatformRequest(requestUri, parameters, parameters);
     }
 
-    private static int ClampPageSize(int requested)
-    {
-        if (requested <= 0)
-        {
-            return 50;
-        }
-
-        return requested > 50 ? 50 : requested;
-    }
-
     private static void AddIfNotEmpty(IDictionary<string, string> parameters, string key, string? value)
     {
         if (!string.IsNullOrWhiteSpace(value))
@@ -119,17 +127,4 @@ internal static class ReportsRequestFactory
         }
     }
 
-    private static string MapStatusFilter(ConversionStatusFilter? filter)
-    {
-        return (filter ?? ConversionStatusFilter.All) switch
-        {
-            ConversionStatusFilter.All => "Payment Completed",
-            ConversionStatusFilter.Pending => "Payment Pending",
-            ConversionStatusFilter.Paid => "Payment Completed",
-            ConversionStatusFilter.Confirmed => "Buyer Confirmed Receipt",
-            ConversionStatusFilter.Cancelled => "Cancelled Order",
-            ConversionStatusFilter.Invalid => "Invalid Order",
-            _ => "Payment Completed"
-        };
-    }
 }
