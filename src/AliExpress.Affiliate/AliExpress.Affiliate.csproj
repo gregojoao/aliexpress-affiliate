@@ -5,16 +5,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>AliExpress.Affiliate</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <Authors>Greco Labs</Authors>
     <PackageOwners>Greco Labs</PackageOwners>
     <Company>Greco Labs</Company>
     <Copyright>Copyright (c) 2026 Greco Labs</Copyright>
     <Title>AliExpress Affiliate SDK for .NET</Title>
-    <Description>.NET SDK for AliExpress Open Platform affiliate APIs, including affiliate link generation, product discovery, promotions, categories, product details, and order lookups.</Description>
-    <PackageTags>aliexpress;affiliate;open-platform;sdk;links;ecommerce;products;orders;promotions</PackageTags>
+    <Description>.NET SDK for AliExpress Open Platform affiliate APIs, including affiliate link generation, product discovery, promotions, categories, product details, order lookups, and an affiliate reporting client (conversions, sales summary).</Description>
+    <PackageTags>aliexpress;affiliate;open-platform;sdk;links;ecommerce;products;orders;promotions;reports;dashboard</PackageTags>
     <PackageProjectUrl>https://github.com/gregojoao/aliexpress-affiliate</PackageProjectUrl>
-    <PackageReleaseNotes>Stable 1.0 SDK release with revised public contracts, request objects, dependency injection through IAliExpressAffiliateClient, organized namespaces, diagnostics APIs, and typed SDK exceptions.</PackageReleaseNotes>
+    <PackageReleaseNotes>1.1.0 adds AliExpress.Affiliate.Reports: IAliExpressAffiliateReportsClient with ListConversionsAsync, GetConversionAsync, GetSalesSummaryAsync, GetClickStatsAsync, GetGeneratedLinkUsageAsync (TOP order.list / order.get); typed Auth/RateLimit/NotFound/Unsupported exceptions with Code/SubCode/RequestId; DI extension AddAliExpressAffiliateReports. Existing v1.0 public surface is preserved.</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/gregojoao/aliexpress-affiliate</RepositoryUrl>
@@ -43,6 +43,10 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AliExpress.Affiliate.Tests" />
   </ItemGroup>
 
 </Project>
