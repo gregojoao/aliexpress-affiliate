@@ -62,9 +62,18 @@ public class AliExpressAffiliateReportsOfficialApiTests
 
         if (page.Items.Count > 0)
         {
-            _output.WriteLine("--- Raw JSON of first conversion (for shape diagnostics) ---");
-            _output.WriteLine(page.Items[0].RawJson ?? "<null>");
-            _output.WriteLine("--- End of raw JSON ---");
+            _output.WriteLine("--- Per-item parent/sub/order ids (for cart grouping diagnostics) ---");
+            foreach (var conversion in page.Items)
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(conversion.RawJson ?? "{}");
+                var root = doc.RootElement;
+                var parent = root.TryGetProperty("parent_order_number", out var p) ? p.GetRawText() : "?";
+                var order = root.TryGetProperty("order_id", out var o) ? o.GetRawText() : "?";
+                var sub = root.TryGetProperty("sub_order_id", out var s) ? s.GetRawText() : "?";
+                var title = conversion.ProductTitle?.Substring(0, Math.Min(40, conversion.ProductTitle.Length));
+                _output.WriteLine($"  parent={parent}  order={order}  sub={sub}  product={title}");
+            }
+            _output.WriteLine("--- End ---");
         }
 
         page.Items.Should().NotBeNull();
