@@ -6,6 +6,16 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [1.1.0] - 2026-05-17
 
+### Fixed (during pre-release validation)
+
+- Monetary values returned by `aliexpress.affiliate.order.list` arrive as integer JSON
+  numbers in the smallest currency unit (e.g. `1113` for `$11.13`). The SDK now
+  detects this shape and scales by 100; decimal numbers and strings continue to be
+  parsed as major units. Without the fix, every conversion appeared 100× inflated.
+- `MapConversion` was looking up `settle_currency` (typo) instead of the actual
+  `settled_currency` field returned by the TOP gateway, causing the currency to
+  silently fall back to `"USD"` even when the real value matched.
+
 ### Added
 
 - New `AliExpress.Affiliate.Reports` area for dashboard / reporting workloads,

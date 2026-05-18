@@ -60,6 +60,13 @@ public class AliExpressAffiliateReportsOfficialApiTests
                 $"purchased={conversion.PurchaseTime:O}");
         }
 
+        if (page.Items.Count > 0)
+        {
+            _output.WriteLine("--- Raw JSON of first conversion (for shape diagnostics) ---");
+            _output.WriteLine(page.Items[0].RawJson ?? "<null>");
+            _output.WriteLine("--- End of raw JSON ---");
+        }
+
         page.Items.Should().NotBeNull();
     }
 

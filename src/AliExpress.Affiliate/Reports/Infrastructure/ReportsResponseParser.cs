@@ -107,6 +107,7 @@ internal static class ReportsResponseParser
     private static AliExpressConversion MapConversion(JsonElement order)
     {
         var currency = ReadFirstNonEmpty(order,
+            "settled_currency",
             "order_currency",
             "settle_currency",
             "paid_amount_currency",
@@ -157,7 +158,7 @@ internal static class ReportsResponseParser
 
     private static AliExpressOrderLine MapLine(JsonElement order)
     {
-        var currency = ReadFirstNonEmpty(order, "order_currency", "paid_amount_currency", "commission_currency");
+        var currency = ReadFirstNonEmpty(order, "settled_currency", "order_currency", "paid_amount_currency", "commission_currency");
         var fallbackCurrency = string.IsNullOrWhiteSpace(currency) ? "USD" : currency!;
         var quantity = ReadInt(order, "item_count", "quantity");
         if (quantity <= 0)
@@ -187,7 +188,7 @@ internal static class ReportsResponseParser
                 continue;
             }
 
-            var amount = ParseDecimal(element);
+            var amount = ParseMonetaryAmount(element);
             if (amount is null)
             {
                 continue;
@@ -200,6 +201,46 @@ internal static class ReportsResponseParser
         }
 
         return Money.Zero(fallbackCurrency);
+    }
+
+    /// <summary>
+    /// Parses a monetary amount from the AliExpress affiliate response.
+    /// </summary>
+    /// <remarks>
+    /// AliExpress emits monetary values in two shapes — the SDK accepts both:
+    /// <list type="bullet">
+    /// <item><description>Integer JSON numbers (e.g. <c>1113</c>) carry the smallest currency unit
+    /// (centavos / cents) and are divided by 100 to recover the major-unit decimal
+    /// (<c>R$ 11.13</c>). This is the convention observed on
+    /// <c>aliexpress.affiliate.order.list</c>.</description></item>
+    /// <item><description>Decimal numbers and strings (e.g. <c>11.13</c> or <c>"11.13"</c>) are
+    /// already in major units and passed through verbatim.</description></item>
+    /// </list>
+    /// Assumes a 2-decimal-place currency. Currencies like JPY (0 decimals) or BHD
+    /// (3 decimals) would need a different scaling; AliExpress affiliate accounts settle
+    /// in BRL / USD / EUR / CNY where this holds.
+    /// </remarks>
+    private static decimal? ParseMonetaryAmount(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Number)
+        {
+            if (element.TryGetInt64(out var asInteger))
+            {
+                return asInteger / 100m;
+            }
+
+            if (element.TryGetDecimal(out var asDecimal))
+            {
+                return asDecimal;
+            }
+        }
+
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            return ParseDecimalString(element.GetString());
+        }
+
+        return null;
     }
 
     private static decimal? ParseDecimal(JsonElement element)

@@ -63,6 +63,25 @@ public class AliExpressAffiliateReportsClientTests
     }
 
     [Fact]
+    public async Task ListConversionsAsync_ShouldDecodeIntegerMonetaryFieldsAsCents()
+    {
+        // Mirrors the shape returned by aliexpress.affiliate.order.list:
+        // monetary values come as integer JSON numbers in the smallest currency unit.
+        var handler = new QueueingHandler(IntegerCentsPageJson);
+        var client = CreateClient(handler);
+
+        var page = await client.ListConversionsAsync(new ListConversionsRequest(
+            From: DateTimeOffset.UtcNow.AddDays(-1),
+            To: DateTimeOffset.UtcNow));
+
+        var conversion = page.Items.Single();
+        conversion.TotalSale.Should().Be(new Money(11.13m, "USD"));
+        conversion.Commission.Should().Be(new Money(0.77m, "USD"));
+        conversion.CommissionRate.Should().Be(0.07m);
+        conversion.Currency.Should().Be("USD");
+    }
+
+    [Fact]
     public async Task ListConversionsAsync_ShouldHonorPagination_AndPropagateHasMore()
     {
         var handler = new QueueingHandler(PageOneJson, PageTwoJson);
@@ -420,6 +439,43 @@ public class AliExpressAffiliateReportsClientTests
             .Where(k => k is not null)
             .ToDictionary(k => k!, k => parsed[k] ?? string.Empty);
     }
+
+    // Mirrors the real shape observed against aliexpress.affiliate.order.list: monetary
+    // values come as integer JSON numbers (cents) and commission_rate as a percentage string.
+    private const string IntegerCentsPageJson = """
+    {
+      "aliexpress_affiliate_order_list_response": {
+        "resp_result": {
+          "resp_code": 200,
+          "result": {
+            "current_page_no": 1,
+            "current_record_count": 1,
+            "total_page_no": 1,
+            "total_record_count": 1,
+            "orders": {
+              "order": [
+                {
+                  "order_id": 8211114279848963,
+                  "sub_order_id": 8211114279858963,
+                  "order_status": "Payment Completed",
+                  "product_id": 1005011822522159,
+                  "product_title": "CURREN 8421 Men's Watch",
+                  "settled_currency": "USD",
+                  "paid_amount": 1113,
+                  "estimated_paid_commission": 77,
+                  "commission_rate": "7.00%",
+                  "product_count": 1,
+                  "tracking_id": "telegram_greco",
+                  "created_time": "2026-05-17 22:52:01",
+                  "paid_time": "2026-05-17 22:54:02"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+    """;
 
     private const string SinglePageJson = """
     {
