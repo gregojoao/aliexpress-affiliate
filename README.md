@@ -19,6 +19,7 @@ It also handles a common edge case from the affiliate API: successful responses 
 
 - Generate single or batch affiliate links with explicit request objects
 - Fetch product details, product discovery results, categories, featured promotions, and orders
+- Read affiliate **reports** (conversions, sales summary) through `IAliExpressAffiliateReportsClient`
 - Register and inject `IAliExpressAffiliateClient`
 - Keep credentials/defaults in `AliExpressAffiliateOptions`
 - Override tracking, country, language, currency, and product-detail behavior per request
@@ -255,6 +256,120 @@ var details = await client.GetOrderDetailsAsync(
     options);
 ```
 
+## Affiliate Reports
+
+Sales/conversion data is exposed by a separate, dashboard-friendly client:
+`AliExpressAffiliateReportsClient` (interface `IAliExpressAffiliateReportsClient`).
+It only consumes the **official AliExpress Open Platform (TOP) gateway** — no portal scraping.
+
+Endpoints consumed today:
+
+| SDK method | TOP method |
+| --- | --- |
+| `ListConversionsAsync` / `GetSalesSummaryAsync` | `aliexpress.affiliate.order.list` |
+| `GetConversionAsync` | `aliexpress.affiliate.order.get` |
+
+`GetClickStatsAsync` and `GetGeneratedLinkUsageAsync` are included for parity with
+non-AliExpress affiliate dashboards. AliExpress does not expose click metrics or
+generated-link attribution through TOP, so both return `Supported = false` with a
+human-readable `UnsupportedReason`. Treat that as a "manual import available"
+signal in your dashboard.
+
+### Registration
+
+The reports client is wire-compatible with the existing link-generation pattern.
+Register it once and resolve `IAliExpressAffiliateReportsClient`:
+
+```csharp
+using AliExpress.Affiliate.Reports.Clients;
+using AliExpress.Affiliate.Reports.DependencyInjection;
+
+services.AddAliExpressAffiliateReports(builder.Configuration); // binds AliExpress:Affiliate:Reports
+```
+
+```json
+{
+  "AliExpress": {
+    "Affiliate": {
+      "Reports": {
+        "AppKey": "<your-app-key>",
+        "AppSecret": "<your-app-secret>",
+        "TrackingId": "<your-tracking-id>",
+        "Endpoint": "https://api-sg.aliexpress.com/sync",
+        "SignMethod": "sha256",
+        "Timeout": "00:00:30"
+      }
+    }
+  }
+}
+```
+
+If you prefer manual wiring (matching the existing `IHttpClientFactory` setup):
+
+```csharp
+services.AddHttpClient("AliExpressAffiliateReportsSdk", c => c.Timeout = Timeout.InfiniteTimeSpan);
+services.AddSingleton(sp =>
+    new AliExpressAffiliateReportsClient(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("AliExpressAffiliateReportsSdk"),
+        new AliExpressAffiliateReportsOptions
+        {
+            AppKey = "<key>",
+            AppSecret = "<secret>",
+            TrackingId = "<tracking>"
+        },
+        clock: () => DateTimeOffset.UtcNow));
+```
+
+### Usage
+
+```csharp
+using AliExpress.Affiliate.Reports.Application;
+using AliExpress.Affiliate.Reports.Application.Requests;
+
+var page = await reports.ListConversionsAsync(new ListConversionsRequest(
+    From: new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero),
+    To:   new DateTimeOffset(2026, 5, 2, 0, 0, 0, TimeSpan.Zero),
+    Status: ConversionStatusFilter.Paid,
+    Page: 1,
+    PageSize: 50));
+
+foreach (var conversion in page.Items)
+{
+    Console.WriteLine($"{conversion.OrderId} {conversion.Status} {conversion.Commission}");
+}
+
+var summary = await reports.GetSalesSummaryAsync(
+    new SalesSummaryRequest(From: window.Start, To: window.End));
+
+Console.WriteLine($"Conversions: {summary.Conversions}");
+Console.WriteLine($"Gross: {summary.GrossRevenue} | Commission: {summary.Commission}");
+```
+
+### Methods and exceptions
+
+| Method | TOP endpoint | Throws |
+| --- | --- | --- |
+| `ListConversionsAsync` | `aliexpress.affiliate.order.list` | `AliExpressAffiliateAuthException`, `AliExpressAffiliateRateLimitException`, `AliExpressAffiliateUnsupportedException`, `AliExpressAffiliateApiException` (with `Code` / `SubCode` / `RequestId`) |
+| `GetConversionAsync` | `aliexpress.affiliate.order.get` | Above + `AliExpressAffiliateNotFoundException` |
+| `GetSalesSummaryAsync` | aggregates `aliexpress.affiliate.order.list` | Same as `ListConversionsAsync` |
+| `GetClickStatsAsync` | — (returns `Supported=false`) | — |
+| `GetGeneratedLinkUsageAsync` | — (returns `Supported=false`) | — |
+
+Transport behavior:
+
+- One automatic retry for HTTP 5xx and timeouts. 4xx and TOP business errors are surfaced immediately.
+- Per-call timeout (default 30 s) layered on top of the injected `HttpClient`; the
+  HttpClient itself can keep `Timeout.InfiniteTimeSpan`.
+- `AppSecret` and `AccessToken` are never logged. App key is masked (`5***0`) in
+  diagnostic logs.
+
+### Known AliExpress limits
+
+- Page size capped at 50 records per `aliexpress.affiliate.order.list` call. Requests above 50 are clamped.
+- The TOP gateway enforces per-app QPS limits. Rate-limit responses surface as `AliExpressAffiliateRateLimitException` with the original `Code` and `RequestId` for support tickets.
+- Time windows are evaluated server-side in **GMT+8**. The SDK converts `DateTimeOffset` inputs to that zone before signing the request, so callers can keep working in UTC.
+- `aliexpress.affiliate.order.list` requires a non-empty `status` parameter — there is no wildcard. `ConversionStatusFilter.All` (and `null`) maps to `"Payment Completed"`, which is the most useful single signal for dashboards. To see other statuses, pass them explicitly (`Pending`, `Confirmed`, `Cancelled`, `Invalid`).
+
 ## Configuration
 
 `AliExpressAffiliateOptions` stores credentials and default request values:
@@ -309,9 +424,13 @@ All SDK-specific exceptions derive from `AliExpressAffiliateException`.
 | Exception | When it is thrown |
 | --- | --- |
 | `AliExpressAffiliateHttpException` | AliExpress returns a non-success HTTP status |
-| `AliExpressAffiliateApiException` | AliExpress returns an API/business error payload |
+| `AliExpressAffiliateApiException` | AliExpress returns an API/business error payload (exposes `Code`, `SubCode`, `RequestId`) |
 | `AliExpressAffiliateValidationException` | Required SDK options are missing |
 | `AliExpressAffiliateLinkUnavailableException` | Link generation succeeds but no `promotion_link` is returned |
+| `AliExpressAffiliateAuthException` *(Reports)* | TOP rejected the call for signature/credential reasons |
+| `AliExpressAffiliateRateLimitException` *(Reports)* | TOP signaled rate-limiting (HTTP 429 or `isv.api-flow-limit`) |
+| `AliExpressAffiliateNotFoundException` *(Reports)* | TOP could not find the requested resource (e.g. order id) |
+| `AliExpressAffiliateUnsupportedException` *(Reports)* | App is not granted the requested TOP endpoint |
 
 ```csharp
 try
@@ -341,6 +460,8 @@ src/AliExpress.Affiliate/
   Exceptions/       SDK exception hierarchy
   Infrastructure/   AliExpress Open Platform HTTP, signing, request, and parsing code
   OpenPlatform/     Public diagnostic helpers for signing, parsing, and request inspection
+  Reports/          Reporting client (conversions, sales summaries) — Application/Clients/
+                    Configuration/DependencyInjection/Domain/Exceptions/Infrastructure
 ```
 
 ## Development
