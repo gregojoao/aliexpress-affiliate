@@ -15,6 +15,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `MapConversion` was looking up `settle_currency` (typo) instead of the actual
   `settled_currency` field returned by the TOP gateway, causing the currency to
   silently fall back to `"USD"` even when the real value matched.
+- AliExpress signals "no records in this window" with `resp_code = 405` ("The result
+  is empty") on a HTTP 200 response. The SDK now translates that into a zero-item
+  `AliExpressConversionPage` / zero-valued `AliExpressSalesSummary` instead of
+  raising `AliExpressAffiliateApiException`.
 
 ### Added
 

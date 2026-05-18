@@ -22,6 +22,13 @@ public interface IAliExpressAffiliateReportsClient
     /// Lists conversions for the configured affiliate account in the requested window.
     /// Backed by <c>aliexpress.affiliate.order.list</c>.
     /// </summary>
+    /// <remarks>
+    /// The <c>From</c> / <c>To</c> fields of <paramref name="request"/> accept any
+    /// <see cref="DateTimeOffset"/>; the SDK converts them to GMT+8 before signing the
+    /// call. When the window has no conversions, AliExpress returns
+    /// <c>resp_code = 405</c>; the SDK translates that into an empty
+    /// <see cref="AliExpressConversionPage"/> rather than throwing.
+    /// </remarks>
     Task<AliExpressConversionPage> ListConversionsAsync(
         ListConversionsRequest request,
         CancellationToken cancellationToken = default);
@@ -39,6 +46,12 @@ public interface IAliExpressAffiliateReportsClient
     /// Reads from <c>aliexpress.affiliate.order.list</c>; clicks remain <c>null</c>
     /// because AliExpress does not expose them via TOP.
     /// </summary>
+    /// <remarks>
+    /// Iterates up to 40 pages of 50 conversions (≈ 2.000 records) before stopping; for
+    /// larger windows the caller should paginate <see cref="ListConversionsAsync"/>
+    /// directly. Pagination is serial because AliExpress TOP enforces per-app QPS limits.
+    /// Empty windows yield a zero-valued summary, not an exception.
+    /// </remarks>
     Task<AliExpressSalesSummary> GetSalesSummaryAsync(
         SalesSummaryRequest request,
         CancellationToken cancellationToken = default);

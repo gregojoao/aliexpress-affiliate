@@ -24,7 +24,9 @@ namespace AliExpress.Affiliate.Reports.Domain;
 /// <param name="PurchaseTime">Order creation / purchase timestamp.</param>
 /// <param name="PaidTime">Payment timestamp, when present.</param>
 /// <param name="FinishTime">Settlement / finished timestamp, when present.</param>
-/// <param name="Currency">Currency reported by AliExpress for monetary fields.</param>
+/// <param name="Currency">Currency reported by AliExpress in <c>settled_currency</c>
+/// (typically <c>USD</c>, even for non-US accounts — AliExpress settles affiliate
+/// payouts in USD by default).</param>
 /// <param name="RawJson">Raw JSON payload of the single order, useful for debugging.</param>
 public record AliExpressConversion(
     string ConversionId,

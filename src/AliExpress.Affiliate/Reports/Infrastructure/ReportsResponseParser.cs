@@ -34,6 +34,19 @@ internal static class ReportsResponseParser
     public static AliExpressConversionPage ParseConversionPage(string responseBody, int page, int pageSize)
     {
         using var document = JsonDocument.Parse(responseBody);
+
+        // AliExpress returns resp_code=405 "The result is empty" instead of an empty array
+        // when the window has no conversions. Surface that as a zero-item page, not an error.
+        if (ReportsErrorClassifier.IsEmptyResultCode(document.RootElement))
+        {
+            return new AliExpressConversionPage(
+                Items: Array.Empty<AliExpressConversion>(),
+                Page: page,
+                PageSize: pageSize,
+                TotalCount: 0,
+                HasMore: false);
+        }
+
         ReportsErrorClassifier.ThrowForTopError(document.RootElement, responseBody);
 
         var result = OpenPlatformResponseEnvelope.ExtractResult(document.RootElement);

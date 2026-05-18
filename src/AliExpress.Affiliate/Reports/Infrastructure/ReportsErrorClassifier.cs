@@ -64,6 +64,28 @@ internal static class ReportsErrorClassifier
         throw new AliExpressAffiliateApiException(fullMessage, code, subCode, requestId);
     }
 
+    /// <summary>
+    /// AliExpress' <c>aliexpress.affiliate.order.list</c> signals "no records in the
+    /// requested window" with <c>resp_code = 405</c> and message <c>"The result is empty"</c>
+    /// instead of returning an empty array. Callers should treat that as a successful
+    /// zero-item page rather than a hard error.
+    /// </summary>
+    public static bool IsEmptyResultCode(JsonElement root)
+    {
+        if (!TryReadError(root, out var code, out _, out var message, out _))
+        {
+            return false;
+        }
+
+        if (string.Equals(code, "405", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(message)
+            && message!.IndexOf("result is empty", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
     private static bool TryReadError(
         JsonElement root,
         out string? code,

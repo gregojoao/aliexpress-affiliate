@@ -326,9 +326,10 @@ services.AddSingleton(sp =>
 using AliExpress.Affiliate.Reports.Application;
 using AliExpress.Affiliate.Reports.Application.Requests;
 
+// Last 7 days (rolling)
 var page = await reports.ListConversionsAsync(new ListConversionsRequest(
-    From: new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero),
-    To:   new DateTimeOffset(2026, 5, 2, 0, 0, 0, TimeSpan.Zero),
+    From: DateTimeOffset.UtcNow.AddDays(-7),
+    To:   DateTimeOffset.UtcNow,
     Status: ConversionStatusFilter.Paid,
     Page: 1,
     PageSize: 50));
@@ -338,12 +339,21 @@ foreach (var conversion in page.Items)
     Console.WriteLine($"{conversion.OrderId} {conversion.Status} {conversion.Commission}");
 }
 
-var summary = await reports.GetSalesSummaryAsync(
-    new SalesSummaryRequest(From: window.Start, To: window.End));
+// Fixed monthly window — useful for reports
+var summary = await reports.GetSalesSummaryAsync(new SalesSummaryRequest(
+    From: new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero),
+    To:   new DateTimeOffset(2026, 5, 31, 23, 59, 59, TimeSpan.Zero)));
 
 Console.WriteLine($"Conversions: {summary.Conversions}");
 Console.WriteLine($"Gross: {summary.GrossRevenue} | Commission: {summary.Commission}");
+
+// Empty window — returns Conversions=0, no exception
+var emptySummary = await reports.GetSalesSummaryAsync(new SalesSummaryRequest(
+    From: new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero),
+    To:   new DateTimeOffset(2020, 1, 2, 0, 0, 0, TimeSpan.Zero)));
 ```
+
+`From` / `To` accept any `DateTimeOffset` — UTC, local, or with an explicit offset. See [Time windows](#time-windows) below for the practical caps.
 
 ### Methods and exceptions
 
@@ -363,12 +373,21 @@ Transport behavior:
 - `AppSecret` and `AccessToken` are never logged. App key is masked (`5***0`) in
   diagnostic logs.
 
-### Known AliExpress limits
+### Time windows
+
+`From` / `To` accept any `DateTimeOffset`. The SDK converts them to **GMT+8** (the timezone the AliExpress TOP gateway evaluates on) before signing the request, so callers can keep working in UTC. There is no fixed maximum window — AliExpress paginates server-side — but practical limits are:
 
 - Page size capped at 50 records per `aliexpress.affiliate.order.list` call. Requests above 50 are clamped.
+- `GetSalesSummaryAsync` walks up to 40 pages × 50 = 2.000 conversions per window before stopping. For larger windows, paginate `ListConversionsAsync` yourself or shrink the window.
+- Very large windows hit the per-app QPS limit faster (each request burns one token).
+
+### Known AliExpress quirks
+
 - The TOP gateway enforces per-app QPS limits. Rate-limit responses surface as `AliExpressAffiliateRateLimitException` with the original `Code` and `RequestId` for support tickets.
-- Time windows are evaluated server-side in **GMT+8**. The SDK converts `DateTimeOffset` inputs to that zone before signing the request, so callers can keep working in UTC.
 - `aliexpress.affiliate.order.list` requires a non-empty `status` parameter — there is no wildcard. `ConversionStatusFilter.All` (and `null`) maps to `"Payment Completed"`, which is the most useful single signal for dashboards. To see other statuses, pass them explicitly (`Pending`, `Confirmed`, `Cancelled`, `Invalid`).
+- AliExpress signals "no conversions in this window" with `resp_code = 405` ("The result is empty") instead of an empty array. The SDK translates that into a zero-item `AliExpressConversionPage` / zero-valued `AliExpressSalesSummary` — callers never see an exception for an empty window.
+- Monetary fields (`paid_amount`, `estimated_paid_commission`, etc.) are emitted as integer JSON numbers in the **smallest currency unit** (e.g. `1113` for `R$11,13`). The SDK divides integer numerics by 100; decimal numerics and strings (`"11.13"`) are taken as-is. Assumes a 2-decimal-place currency — applies to all currencies AliExpress affiliate accounts settle in today (BRL / USD / EUR / CNY).
+- The `Currency` field on every `AliExpressConversion` reflects whatever AliExpress reported in `settled_currency`. AliExpress typically settles affiliate commissions in **USD**, even for Brazilian accounts whose buyers paid in BRL — the BRL amount is visible in the embedded `product_detail_url` query string but isn't part of the settlement record. The SDK never converts currencies.
 
 ## Configuration
 

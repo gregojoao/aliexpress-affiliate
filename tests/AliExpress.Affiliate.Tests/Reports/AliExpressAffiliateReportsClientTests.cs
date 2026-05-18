@@ -63,6 +63,39 @@ public class AliExpressAffiliateReportsClientTests
     }
 
     [Fact]
+    public async Task ListConversionsAsync_WhenWindowEmpty_ShouldReturnZeroItems_NotThrow()
+    {
+        // AliExpress signals "no records in this window" with resp_code=405 instead of
+        // an empty array. The SDK must translate that into an empty page.
+        var handler = new QueueingHandler(EmptyResultErrorJson);
+        var client = CreateClient(handler);
+
+        var page = await client.ListConversionsAsync(new ListConversionsRequest(
+            From: DateTimeOffset.UtcNow.AddDays(-1),
+            To: DateTimeOffset.UtcNow));
+
+        page.Items.Should().BeEmpty();
+        page.TotalCount.Should().Be(0);
+        page.HasMore.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetSalesSummaryAsync_WhenWindowEmpty_ShouldReturnZeroSummary_NotThrow()
+    {
+        var handler = new QueueingHandler(EmptyResultErrorJson);
+        var client = CreateClient(handler);
+
+        var summary = await client.GetSalesSummaryAsync(new SalesSummaryRequest(
+            From: DateTimeOffset.UtcNow.AddDays(-1),
+            To: DateTimeOffset.UtcNow));
+
+        summary.Conversions.Should().Be(0);
+        summary.GrossRevenue.Amount.Should().Be(0m);
+        summary.Commission.Amount.Should().Be(0m);
+        summary.Supported.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ListConversionsAsync_ShouldDecodeIntegerMonetaryFieldsAsCents()
     {
         // Mirrors the shape returned by aliexpress.affiliate.order.list:
@@ -439,6 +472,19 @@ public class AliExpressAffiliateReportsClientTests
             .Where(k => k is not null)
             .ToDictionary(k => k!, k => parsed[k] ?? string.Empty);
     }
+
+    // Real shape returned by AliExpress when a window has zero conversions — note the
+    // resp_code=405 carried as a successful HTTP 200 response.
+    private const string EmptyResultErrorJson = """
+    {
+      "aliexpress_affiliate_order_list_response": {
+        "resp_result": {
+          "resp_code": 405,
+          "resp_msg": "The result is empty"
+        }
+      }
+    }
+    """;
 
     // Mirrors the real shape observed against aliexpress.affiliate.order.list: monetary
     // values come as integer JSON numbers (cents) and commission_rate as a percentage string.
